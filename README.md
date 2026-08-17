@@ -120,6 +120,27 @@ npm run preview
 
 ---
 
+## 🚀 部署到 GitHub Pages
+
+本项目已配置 `base: './'`（相对路径），可直接部署到 GitHub Pages 的任意子路径（如 `https://<用户名>.github.io/<仓库名>/`），资源会以 `./assets/...` 加载，无需硬编码仓库名。
+
+> 路由采用 **hash 模式**（`createWebHashHistory`），刷新子页面不会 404，也**不需要**配置 `404.html` 或服务端重写，直接静态托管即可。
+
+### 方式一：GitHub Actions 自动部署（推荐）
+仓库已内置 `.github/workflows/deploy.yml`：
+1. 将代码推送到 `main` 分支；
+2. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**；
+3. 后续每次推送到 `main` 会自动构建并发布，几分钟后面板会显示访问地址。
+
+### 方式二：手动部署
+```bash
+npm run build          # 产物输出到 dist/
+# 将 dist/ 内容推送到 gh-pages 分支，或上传到任意静态托管
+```
+仓库 **Settings → Pages → Source** 选择 **Deploy from a branch**，分支选 `gh-pages`、目录选 `/ (root)`。
+
+---
+
 ## 📄 许可
 
 本项目用于学习演示，课程内容参考《Docker 从入门到实践》与 Gitee Git 大全的公开知识体系。
