@@ -115,20 +115,30 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { DockerEnv } from '@/types'
 
-const props = defineProps({
-  env: {
-    type: Object,
-    required: true,
-    default: () => ({ images: [], containers: [], volumes: [], networks: [] })
-  },
-  events: { type: Array, default: () => [] },
-  syncSeq: { type: Number, default: 0 }
+interface TopologyEvent {
+  seq: number
+  time: string
+  input: string
+  ok: boolean
+}
+
+interface Props {
+  env: DockerEnv
+  events?: TopologyEvent[]
+  syncSeq?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  events: () => [],
+  syncSeq: 0
 })
 
-const short = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s))
+const short = (s: string | number, n: number) =>
+  String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s)
 
 const builtin = ['host', 'none']
 const runningCount = computed(() => props.env.containers.filter(c => c.status === 'running').length)
@@ -136,7 +146,7 @@ const userNets = computed(() => props.env.networks.filter(n => !builtin.includes
 
 // 同步指示器
 const flashing = ref(false)
-let flashTimer = null
+let flashTimer: ReturnType<typeof setTimeout> | null = null
 watch(() => props.syncSeq, () => {
   flashing.value = true
   clearTimeout(flashTimer)

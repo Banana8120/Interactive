@@ -99,13 +99,14 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { gitChapters } from '@/data/gitLessons'
 import { useGitProgressStore } from '@/stores/gitProgress'
 import { resetGitEnvironment, loadGitState, saveGitState, clearGitState } from '@/terminal/gitSimulator'
+import type { GitLesson, GitChapter } from '@/types'
 import LessonContent from '@/components/LessonContent.vue'
 import GitTerminal from '@/components/GitTerminal.vue'
 import GitTaskPanel from '@/components/GitTaskPanel.vue'
@@ -115,9 +116,15 @@ const route = useRoute()
 const router = useRouter()
 const store = useGitProgressStore()
 
-const allLessons = computed(() => gitChapters.flatMap((c) => c.lessons.map((l) => ({ ...l, chapterId: c.id }))))
+interface FlatLesson extends GitLesson {
+  chapterId: string
+}
+
+const allLessons = computed<FlatLesson[]>(() =>
+  gitChapters.flatMap((c: GitChapter) => c.lessons.map((l) => ({ ...l, chapterId: c.id })))
+)
 const index = computed(() => allLessons.value.findIndex((l) => l.id === route.params.lessonId))
-const lesson = computed(() => allLessons.value[index.value] || null)
+const lesson = computed<FlatLesson | null>(() => allLessons.value[index.value] || null)
 const chapter = computed(() => gitChapters.find((c) => c.id === lesson.value?.chapterId))
 const prevLesson = computed(() => index.value > 0 ? allLessons.value[index.value - 1] : null)
 const nextLesson = computed(() => index.value < allLessons.value.length - 1 ? allLessons.value[index.value + 1] : null)
@@ -143,7 +150,7 @@ onMounted(() => {
   checkTick.value++
 })
 
-function onCommand({ ok, errorStreak: streak }) {
+function onCommand({ ok, errorStreak: streak }: { ok: boolean; errorStreak: number }) {
   errorStreak.value = streak || 0
   checkTick.value++
   // 命令执行后自动保存仓库状态到 localStorage
@@ -161,7 +168,7 @@ function onComplete() {
   store.completeLesson(lesson.value.id)
 }
 
-function onHintUsed(level) {
+function onHintUsed(level: number) {
   if (!lesson.value) return
   store.recordHint(lesson.value.id, level)
 }
@@ -189,7 +196,7 @@ function resetPractice() {
     { confirmButtonText: '重置', cancelButtonText: '取消', type: 'warning' }
   )
     .then(() => {
-      clearGitState(lesson.value.id)
+      clearGitState(lesson.value!.id)
       resetGitEnvironment()
       checkTick.value++
       ElMessage.success('当前练习已重置')

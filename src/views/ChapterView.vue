@@ -90,7 +90,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { chapters } from '@/data/lessons'
@@ -107,7 +107,7 @@ const chapterIndex = computed(() => chapters.findIndex((c) => c.id === chapter.v
 const prevChapter = computed(() => chapterIndex.value > 0 ? chapters[chapterIndex.value - 1] : null)
 const nextChapter = computed(() => chapterIndex.value < chapters.length - 1 ? chapters[chapterIndex.value + 1] : null)
 
-const goLesson = (lesson) => router.push(`/lesson/${lesson.id}`)
+const goLesson = (lesson: { id: string }) => router.push(`/lesson/${lesson.id}`)
 </script>
 
 <style scoped>

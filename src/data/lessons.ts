@@ -12,17 +12,19 @@
  *  - practice 练习区 { title, desc, commands }
  */
 
-// 练习校验辅助函数
-const hasRunAny = (cmds) => (env) => cmds.some(cmd => env.history.some(h => h.trim().startsWith(cmd)))
-const hasImage = (name) => (env) => env.images.some(img => img.full.includes(name))
-const hasContainerByName = (name) => (env) => env.containers.some(c => c.name === name)
-const hasContainerByImage = (name) => (env) => env.containers.some(c => c.image.includes(name))
-const hasRunningContainer = (name) => (env) => env.containers.some(c => c.name === name && c.status === 'running')
-const hasVolume = (name) => (env) => env.volumes.some(v => v.name === name)
-const hasNetwork = (name) => (env) => env.networks.some(n => n.name === name)
-const hasComposeProject = (name) => (env) => env.containers.some(c => c.composeProject === name)
+import type { Chapter, CourseStats, DockerEnv } from '@/types'
 
-export const chapters = [
+// 练习校验辅助函数
+const hasRunAny = (cmds: string[]) => (env: DockerEnv) => cmds.some(cmd => env.history.some(h => h.trim().startsWith(cmd)))
+const hasImage = (name: string) => (env: DockerEnv) => env.images.some(img => img.full.includes(name))
+const hasContainerByName = (name: string) => (env: DockerEnv) => env.containers.some(c => c.name === name)
+const hasContainerByImage = (name: string) => (env: DockerEnv) => env.containers.some(c => c.image.includes(name))
+const hasRunningContainer = (name: string) => (env: DockerEnv) => env.containers.some(c => c.name === name && c.status === 'running')
+const hasVolume = (name: string) => (env: DockerEnv) => env.volumes.some(v => v.name === name)
+const hasNetwork = (name: string) => (env: DockerEnv) => env.networks.some(n => n.name === name)
+const hasComposeProject = (name: string) => (env: DockerEnv) => env.containers.some(c => c.composeProject === name)
+
+export const chapters: Chapter[] = [
   {
     id: 'intro',
     index: '01',
@@ -1013,7 +1015,7 @@ export const chapters = [
 ]
 
 /** 章节总数 / 课时总数 / 练习总数 */
-export const stats = chapters.reduce(
+export const stats: CourseStats = chapters.reduce(
   (acc, ch) => {
     acc.chapters++
     acc.lessons += ch.lessons.length
@@ -1023,3 +1025,6 @@ export const stats = chapters.reduce(
   },
   { chapters: 0, lessons: 0, practices: 0, quizzes: 0 }
 )
+
+// 供 stores / 组件复用本模块涉及的共享类型
+export type { Chapter, Lesson, ContentBlock, Practice, Quiz, TerminalConfig, CourseStats } from '@/types'

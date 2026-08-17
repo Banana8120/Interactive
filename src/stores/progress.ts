@@ -1,12 +1,28 @@
 import { defineStore } from 'pinia'
 import { chapters } from '@/data/lessons'
+import type { Chapter } from '@/data/lessons'
 
 const STORAGE_KEY = 'docker-tutorial-progress-v1'
 
-function loadState() {
+export interface QuizResult {
+  correct: boolean
+  total: number
+  ts: number
+}
+
+export interface ProgressState {
+  completedLessons: string[]
+  quizResults: Record<string, QuizResult>
+  finishedChapters: string[]
+  lastVisited: string | null
+  startedAt: number
+  hintsUsed: Record<string, number>
+}
+
+function loadState(): ProgressState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) return JSON.parse(raw) as ProgressState
   } catch (e) {
     /* ignore */
   }
@@ -14,18 +30,18 @@ function loadState() {
 }
 
 export const useProgressStore = defineStore('progress', {
-  state: () => loadState(),
+  state: (): ProgressState => loadState(),
 
   getters: {
-    totalLessons: () => chapters.reduce((s, c) => s + c.lessons.length, 0),
+    totalLessons: () => chapters.reduce((s: number, c: Chapter) => s + c.lessons.length, 0),
     totalChapters: () => chapters.length,
-    completedCount: (state) => state.completedLessons.length,
-    overallPercent: (state) => {
+    completedCount: (state): number => state.completedLessons.length,
+    overallPercent: (state): number => {
       const total = chapters.reduce((s, c) => s + c.lessons.length, 0)
       return total ? Math.round((state.completedLessons.length / total) * 100) : 0
     },
-    isLessonCompleted: (state) => (lessonId) => state.completedLessons.includes(lessonId),
-    isChapterCompleted: (state) => (chapterId) => state.finishedChapters.includes(chapterId),
+    isLessonCompleted: (state) => (lessonId: string): boolean => state.completedLessons.includes(lessonId),
+    isChapterCompleted: (state) => (chapterId: string): boolean => state.finishedChapters.includes(chapterId),
     chapterProgress(state) {
       return chapters.map((ch) => {
         const done = ch.lessons.filter((l) => state.completedLessons.includes(l.id)).length
@@ -37,7 +53,7 @@ export const useProgressStore = defineStore('progress', {
         }
       })
     },
-    chapterPercent: (state) => (chapterId) => {
+    chapterPercent: (state) => (chapterId: string): number => {
       const ch = chapters.find((c) => c.id === chapterId)
       if (!ch) return 0
       const done = ch.lessons.filter((l) => state.completedLessons.includes(l.id)).length
@@ -62,7 +78,7 @@ export const useProgressStore = defineStore('progress', {
       }))
     },
 
-    completeLesson(lessonId, chapterId) {
+    completeLesson(lessonId: string, chapterId: string) {
       if (!this.completedLessons.includes(lessonId)) {
         this.completedLessons.push(lessonId)
       }
@@ -76,17 +92,17 @@ export const useProgressStore = defineStore('progress', {
       this.persist()
     },
 
-    recordQuiz(lessonId, index, correct, total) {
+    recordQuiz(lessonId: string, index: number, correct: boolean, total: number) {
       this.quizResults[`${lessonId}#${index}`] = { correct, total, ts: Date.now() }
       this.persist()
     },
 
-    setLastVisited(lessonId) {
+    setLastVisited(lessonId: string | null) {
       this.lastVisited = lessonId
       this.persist()
     },
 
-    recordHint(lessonId, level) {
+    recordHint(lessonId: string, level: number) {
       if (!lessonId) return
       this.hintsUsed[lessonId] = level
       this.persist()

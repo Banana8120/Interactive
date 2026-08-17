@@ -78,25 +78,41 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, nextTick, watch, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { executeGitCommand, resetGitEnvironment, getGitState } from '@/terminal/gitSimulator'
+import { executeGitCommand, getGitState } from '@/terminal/gitSimulator'
 
-const props = defineProps({
-  suggestions: { type: Array, default: () => [] },
-  task: { type: String, default: '' }
+interface TermBlock {
+  input?: string
+  error?: boolean
+  lines?: string[]
+  typing?: boolean
+}
+
+type ExecuteResult = ReturnType<typeof executeGitCommand>
+
+interface Props {
+  suggestions?: string[]
+  task?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  suggestions: () => [],
+  task: ''
 })
 
-const emit = defineEmits(['command-executed', 'reset-environment'])
+const emit = defineEmits<{
+  (e: 'command-executed', payload: { input: string; ok: boolean; errorStreak: number }): void
+  (e: 'reset-environment'): void
+}>()
 
-const outputRef = ref(null)
-const inputRef = ref(null)
+const outputRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 const current = ref('')
-const history = ref([])
-const historyStack = ref([])
+const history = ref<TermBlock[]>([])
+const historyStack = ref<string[]>([])
 const historyIndex = ref(-1)
-const typingLines = ref([])
+const typingLines = ref<string[]>([])
 const busy = ref(false)
 let errorStreak = 0
 
@@ -111,7 +127,7 @@ function clearScreen() {
   scrollToBottom()
 }
 
-function pushBlock(block) {
+function pushBlock(block: TermBlock) {
   history.value.push(block)
   if (history.value.length > 300) history.value.splice(0, history.value.length - 300)
   scrollToBottom()
@@ -124,12 +140,12 @@ async function submit() {
   historyStack.value.push(input)
   historyIndex.value = -1
 
-  const result = executeGitCommand(input)
+  const result: ExecuteResult = executeGitCommand(input)
   pushBlock({ input, error: result.type === 'error', lines: [] })
 
   if (result.type === 'clear') {
     clearScreen()
-    emit('command-executed', { input, ok: true })
+    emit('command-executed', { input, ok: true, errorStreak })
     return
   }
 
@@ -201,7 +217,7 @@ function autocomplete() {
   }
 }
 
-function quickRun(cmd) {
+function quickRun(cmd: string) {
   current.value = cmd
   submit()
 }
@@ -212,7 +228,7 @@ function resetEnv() {
 }
 
 // 简单语法高亮
-const highlight = (line) => {
+const highlight = (line: string): string => {
   if (!line) return '&nbsp;'
   let s = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   s = s.replace(/\b[0-9a-f]{7,40}\b/g, '<span class="hl-hash">$&</span>')
@@ -222,7 +238,7 @@ const highlight = (line) => {
 }
 
 function focusInput() {
-  inputRef.value && inputRef.value.focus()
+  if (inputRef.value) inputRef.value.focus()
 }
 
 watch(() => props.suggestions, () => { focusInput() })

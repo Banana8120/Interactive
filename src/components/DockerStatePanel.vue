@@ -27,14 +27,19 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from 'vue'
 import DockerVisualizer from './DockerVisualizer.vue'
 
-const props = defineProps({
-  env: { type: Object, required: true },
-  events: { type: Array, default: () => [] },
-  syncSeq: { type: Number, default: 0 }
+interface Props {
+  env: Record<string, any>
+  events?: any[]
+  syncSeq?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  events: () => [],
+  syncSeq: 0
 })
 
 const STORAGE_KEY = 'docker-viz-panel-open'

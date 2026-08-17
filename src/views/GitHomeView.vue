@@ -134,19 +134,20 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { gitChapters, gitStats } from '@/data/gitLessons'
 import { useGitProgressStore } from '@/stores/gitProgress'
+import type { GitChapter, GitLesson } from '@/types'
 
 const router = useRouter()
 const store = useGitProgressStore()
 
 const stats = gitStats
-const recommend = computed(() => store.recommendedLesson)
+const recommend = computed(() => store.recommendedLesson as (GitLesson & { chapter: GitChapter }) | null)
 
-const chapterDone = (id) => store.chapterProgress.find((c) => c.id === id)?.percent === 100
+const chapterDone = (id: string) => store.chapterProgress.find((c) => c.id === id)?.percent === 100
 
 const startLearning = () => {
   if (store.recommendedLesson) {
@@ -156,13 +157,20 @@ const startLearning = () => {
   }
 }
 
-const goChapter = (ch) => {
+const goChapter = (ch: GitChapter) => {
   router.push({ path: '/git', query: { ch: ch.id } })
   // 跳转到该章第一课
   router.push(`/git/lesson/${ch.lessons[0].id}`)
 }
 
-const features = [
+interface Feature {
+  title: string
+  desc: string
+  icon: string
+  color: string
+}
+
+const features: Feature[] = [
   { title: '知识体系完整', desc: '参考 Gitee Git 大全，覆盖基础操作到进阶技巧', icon: 'Guide', color: '#F05032' },
   { title: '模拟仓库实操', desc: '浏览器内直接输入 git 命令，实时查看仓库变化', icon: 'Monitor', color: '#00B96B' },
   { title: '智能提示引导', desc: '错误命令自动纠错，卡住时给出分级线索提示', icon: 'ChatLineRound', color: '#F7A600' },

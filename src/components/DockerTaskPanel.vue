@@ -84,22 +84,33 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getEnvironment } from '@/terminal/simulator'
+import type { Practice } from '@/types'
 
-const props = defineProps({
-  practice: { type: Object, required: true },
-  lessonId: { type: String, required: true },
+interface Props {
+  practice: Practice
+  lessonId: string
   /** 命令执行次数（每次命令后 +1，触发自动检测） */
-  checkTick: { type: Number, default: 0 },
+  checkTick?: number
   /** 连续错误次数（触发卡住提示） */
-  errorStreak: { type: Number, default: 0 },
-  done: { type: Boolean, default: false }
+  errorStreak?: number
+  done?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  checkTick: 0,
+  errorStreak: 0,
+  done: false
 })
 
-const emit = defineEmits(['complete', 'auto-done', 'hint-used'])
+const emit = defineEmits<{
+  (e: 'complete'): void
+  (e: 'auto-done'): void
+  (e: 'hint-used', revealed: number): void
+}>()
 
 const revealed = ref(0)
 

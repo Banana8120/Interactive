@@ -145,7 +145,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { chapters, stats } from '@/data/lessons'
@@ -154,9 +154,16 @@ import { useProgressStore } from '@/stores/progress'
 const router = useRouter()
 const store = useProgressStore()
 
-const chapterPercent = (id) => store.chapterPercent(id)
+const chapterPercent = (id: string) => store.chapterPercent(id)
 
-const features = [
+interface Feature {
+  title: string
+  desc: string
+  icon: string
+  color: string
+}
+
+const features: Feature[] = [
     { title: '分步引导教学', desc: '每个概念拆解为小节，从零讲起，循序渐进', icon: 'Guide', color: '#2496ED' },
     { title: '模拟终端实操', desc: '浏览器内直接输入 docker 命令，实时看到结果', icon: 'Monitor', color: '#00B96B' },
     { title: '即时反馈纠错', desc: '命令错误给出提示，测验题附带详细解析', icon: 'ChatLineRound', color: '#F7A600' },
@@ -173,7 +180,7 @@ const startLearning = () => {
 
 const continueLearning = startLearning
 
-const goChapter = (ch) => router.push(`/chapter/${ch.id}`)
+const goChapter = (ch: { id: string }) => router.push(`/chapter/${ch.id}`)
 </script>
 
 <style scoped>

@@ -209,13 +209,18 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getGitState, getStatusMap } from '@/terminal/gitSimulator'
+import type { GitState } from '@/types'
 
-const props = defineProps({
+interface Props {
   /** 命令执行次数，变化时重新读取引擎状态 */
-  checkTick: { type: Number, default: 0 }
+  checkTick?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  checkTick: 0
 })
 
 const STORAGE_KEY = 'git-state-panel-open'

@@ -9,16 +9,17 @@
  */
 
 import { getGitState } from '@/terminal/gitSimulator'
+import type { GitChapter, GitState } from '@/types'
 
 /** 便捷检查：当前是否在指定分支 */
-const onBranch = (name) => getGitState().head === name
+const onBranch = (name: string) => getGitState().head === name
 /** 便捷检查：分支是否存在 */
-const hasBranch = (name) => Object.prototype.hasOwnProperty.call(getGitState().branches, name)
+const hasBranch = (name: string) => Object.prototype.hasOwnProperty.call(getGitState().branches, name)
 /** 便捷检查：提交数 */
 const commitCount = () => Object.keys(getGitState().commits).length
 /** 便捷检查：某分支的提交数（从 master 回溯统计） */
-const branchCommitCount = (name) => {
-  const s = getGitState()
+const branchCommitCount = (name: string) => {
+  const s = getGitState() as GitState
   if (!s.branches[name]) return 0
   let count = 0
   let h = s.branches[name]
@@ -27,13 +28,13 @@ const branchCommitCount = (name) => {
 }
 /** 便捷检查：本地与远程分支哈希是否一致（已推送） */
 const pushed = (branch = 'master') => {
-  const s = getGitState()
+  const s = getGitState() as GitState
   return !!(s.remotes.origin && s.remotes.origin.branches[branch] === s.branches[branch])
 }
 /** 便捷检查：是否存在标签 */
-const hasTag = (name) => Object.prototype.hasOwnProperty.call(getGitState().tags, name)
+const hasTag = (name: string) => Object.prototype.hasOwnProperty.call(getGitState().tags, name)
 
-export const gitChapters = [
+export const gitChapters: GitChapter[] = [
   {
     id: 'git-intro',
     index: '01',
@@ -550,3 +551,6 @@ export const gitStats = {
   lessons: gitChapters.reduce((s, c) => s + c.lessons.length, 0),
   practices: gitChapters.reduce((s, c) => s + c.lessons.filter((l) => l.practice).length, 0)
 }
+
+// 供 stores / 组件复用本模块涉及的共享类型
+export type { GitChapter, GitLesson, GitPractice, GitTerminalConfig, GitQuiz, GitCommit, GitRemote, GitStash, GitState, ContentBlock } from '@/types'

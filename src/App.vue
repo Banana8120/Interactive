@@ -3,7 +3,7 @@
         <el-header class="app-header" height="56px">
             <div class="header-inner">
                 <router-link to="/" class="brand">
-                    <img src="/favicon.svg" alt="Docker" class="brand-logo" />
+                    <img src="/favicon.svg" alt="Docker + Git 交互式教程" class="brand-logo" />
                     <span class="brand-text">
                         <span class="brand-sub">交互式学习教程</span>
                     </span>
@@ -83,7 +83,7 @@
     </el-container>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProgressStore } from '@/stores/progress'
@@ -93,7 +93,13 @@ const route = useRoute()
 const store = useProgressStore()
 const gitStore = useGitProgressStore()
 
-const navItems = [
+interface NavItem {
+  path: string
+  label: string
+  icon: string
+}
+
+const navItems: NavItem[] = [
     { path: '/', label: 'Docker 学习', icon: 'HomeFilled' },
     { path: '/git', label: 'Git 学习', icon: 'Share' },
     { path: '/progress', label: '总学习进度', icon: 'DataLine' },
@@ -121,7 +127,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => window.removeEventListener('resize', checkMobile))
 
-const isActive = (path) => (path === '/' ? route.path === '/' : route.path.startsWith(path))
+const isActive = (path: string) => (path === '/' ? route.path === '/' : route.path.startsWith(path))
 </script>
 
 <style scoped>

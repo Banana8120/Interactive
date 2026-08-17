@@ -1,3 +1,6 @@
 node_modules
 dist
+dist-verify
 .workbuddy
+# Vite ephemeral TS config bundles
+vite.config.ts.timestamp-*.mjs

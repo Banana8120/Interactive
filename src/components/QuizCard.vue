@@ -42,16 +42,24 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from 'vue'
+import type { Quiz } from '@/types'
 
-const props = defineProps({
-  questions: { type: Array, default: () => [] }
-})
+const props = withDefaults(
+  defineProps<{
+    questions?: Quiz[]
+  }>(),
+  {
+    questions: () => []
+  }
+)
 
-const emit = defineEmits(['answered'])
+const emit = defineEmits<{
+  (e: 'answered', payload: { questionIndex: number; correct: boolean }): void
+}>()
 
-const answered = ref({})
+const answered = ref<Record<number, number>>({})
 const stats = ref({ correct: 0, total: 0 })
 
 watch(
@@ -63,7 +71,7 @@ watch(
   { deep: true }
 )
 
-function select(qi, oi) {
+function select(qi: number, oi: number) {
   if (answered.value[qi] !== undefined) return
   answered.value[qi] = oi
   const correct = oi === props.questions[qi].answer
@@ -72,7 +80,7 @@ function select(qi, oi) {
   emit('answered', { questionIndex: qi, correct })
 }
 
-function optionClass(qi, oi) {
+function optionClass(qi: number, oi: number): string {
   const sel = answered.value[qi]
   if (sel === undefined) return ''
   if (oi === props.questions[qi].answer) return 'correct'

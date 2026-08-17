@@ -144,7 +144,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
@@ -152,6 +152,11 @@ import { chapters } from '@/data/lessons'
 import { gitChapters } from '@/data/gitLessons'
 import { useProgressStore } from '@/stores/progress'
 import { useGitProgressStore } from '@/stores/gitProgress'
+
+interface LastVisited {
+  id: string
+  module: 'docker' | 'git'
+}
 
 const store = useProgressStore()
 const gitStore = useGitProgressStore()
@@ -161,114 +166,114 @@ const combinedTotalLessons = computed(() => store.totalLessons + gitStore.totalL
 const combinedCompletedCount = computed(() => store.completedCount + gitStore.completedCount)
 const combinedTotalChapters = computed(() => store.totalChapters + gitStore.totalChapters)
 const combinedFinishedChapters = computed(() => {
-    const dockerDone = store.finishedChapters.length
-    const gitDone = gitStore.chapterProgress.filter((c) => c.percent === 100).length
-    return dockerDone + gitDone
+  const dockerDone = store.finishedChapters.length
+  const gitDone = gitStore.chapterProgress.filter((c) => c.percent === 100).length
+  return dockerDone + gitDone
 })
 const combinedOverallPercent = computed(() => {
-    const total = combinedTotalLessons.value
-    return total ? Math.round((combinedCompletedCount.value / total) * 100) : 0
+  const total = combinedTotalLessons.value
+  return total ? Math.round((combinedCompletedCount.value / total) * 100) : 0
 })
 const combinedColor = computed(() => {
-    const docker = store.overallPercent
-    const git = gitStore.overallPercent
-    return docker >= git ? '#2496ED' : '#F05032'
+  const docker = store.overallPercent
+  const git = gitStore.overallPercent
+  return docker >= git ? '#2496ED' : '#F05032'
 })
 
 const startedText = computed(() => {
-    const t = Math.min(store.startedAt || Infinity, gitStore.startedAt || Infinity)
-    if (!Number.isFinite(t)) return '—'
-    const d = new Date(t)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const t = Math.min(store.startedAt || Infinity, gitStore.startedAt || Infinity)
+  if (!Number.isFinite(t)) return '—'
+  const d = new Date(t)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
-const lastVisited = computed(() => {
-    if (!store.lastVisited && !gitStore.lastVisited) return null
-    // 没有明确时间戳时，优先返回有值的一方
-    if (!store.lastVisited) return { id: gitStore.lastVisited, module: 'git' }
-    if (!gitStore.lastVisited) return { id: store.lastVisited, module: 'docker' }
-    return { id: store.lastVisited, module: 'docker' }
+const lastVisited = computed<LastVisited | null>(() => {
+  if (!store.lastVisited && !gitStore.lastVisited) return null
+  // 没有明确时间戳时，优先返回有值的一方
+  if (!store.lastVisited) return { id: gitStore.lastVisited!, module: 'git' }
+  if (!gitStore.lastVisited) return { id: store.lastVisited, module: 'docker' }
+  return { id: store.lastVisited, module: 'docker' }
 })
 
 const lastLessonTitle = computed(() => {
-    const lv = lastVisited.value
-    if (!lv) return ''
-    if (lv.module === 'git') {
-        for (const ch of gitChapters) {
-            const l = ch.lessons.find((x) => x.id === lv.id)
-            if (l) return `[Git] ${ch.title} · ${l.title}`
-        }
-    } else {
-        for (const ch of chapters) {
-            const l = ch.lessons.find((x) => x.id === lv.id)
-            if (l) return `[Docker] ${ch.title} · ${l.title}`
-        }
+  const lv = lastVisited.value
+  if (!lv) return ''
+  if (lv.module === 'git') {
+    for (const ch of gitChapters) {
+      const l = ch.lessons.find((x) => x.id === lv.id)
+      if (l) return `[Git] ${ch.title} · ${l.title}`
     }
-    return ''
+  } else {
+    for (const ch of chapters) {
+      const l = ch.lessons.find((x) => x.id === lv.id)
+      if (l) return `[Docker] ${ch.title} · ${l.title}`
+    }
+  }
+  return ''
 })
 
 function continueLast() {
-    const lv = lastVisited.value
-    if (!lv) return
-    if (lv.module === 'git') {
-        router.push(`/git/lesson/${lv.id}`)
-    } else {
-        router.push(`/lesson/${lv.id}`)
-    }
+  const lv = lastVisited.value
+  if (!lv) return
+  if (lv.module === 'git') {
+    router.push(`/git/lesson/${lv.id}`)
+  } else {
+    router.push(`/lesson/${lv.id}`)
+  }
 }
 
 const allChapters = computed(() => {
-    const docker = chapters.map((ch) => ({
-        ...ch,
-        module: 'docker',
-        percent: store.chapterPercent(ch.id),
-        isCompleted: store.isChapterCompleted(ch.id),
-    }))
-    const git = gitChapters.map((ch) => ({
-        ...ch,
-        module: 'git',
-        percent: gitStore.chapterPercent(ch.id),
-        isCompleted: gitStore.chapterPercent(ch.id) === 100,
-    }))
-    return [...docker, ...git]
+  const docker = chapters.map((ch) => ({
+    ...ch,
+    module: 'docker',
+    percent: store.chapterPercent(ch.id),
+    isCompleted: store.isChapterCompleted(ch.id),
+  }))
+  const git = gitChapters.map((ch) => ({
+    ...ch,
+    module: 'git',
+    percent: gitStore.chapterPercent(ch.id),
+    isCompleted: gitStore.chapterPercent(ch.id) === 100,
+  }))
+  return [...docker, ...git]
 })
 
-function goChapter(ch) {
-    if (ch.module === 'git') {
-        router.push(`/git`)
-    } else {
-        router.push(`/chapter/${ch.id}`)
-    }
+function goChapter(ch: { id: string; module?: string }) {
+  if (ch.module === 'git') {
+    router.push(`/git`)
+  } else {
+    router.push(`/chapter/${ch.id}`)
+  }
 }
 
 const quizRecords = computed(() => {
-    const list = []
-    for (const ch of chapters) {
-        for (const l of ch.lessons) {
-            if (!l.quiz) continue
-            l.quiz.forEach((q, i) => {
-                const r = store.quizResults[`${l.id}#${i}`]
-                if (r !== undefined) {
-                    list.push({ question: q.question, correct: r.correct, chapter: ch.title, lesson: l.title })
-                }
-            })
+  const list: { question: string; correct: boolean; chapter: string; lesson: string }[] = []
+  for (const ch of chapters) {
+    for (const l of ch.lessons) {
+      if (!l.quiz) continue
+      l.quiz.forEach((q, i) => {
+        const r = store.quizResults[`${l.id}#${i}`]
+        if (r !== undefined) {
+          list.push({ question: q.question, correct: r.correct, chapter: ch.title, lesson: l.title })
         }
+      })
     }
-    return list.reverse()
+  }
+  return list.reverse()
 })
 
 function confirmReset() {
-    ElMessageBox.confirm(
-        '确定要重置全部学习进度吗？Docker 与 Git 的已完成章节、练习与测验记录都将被清除，此操作不可恢复。',
-        '重置学习进度',
-        { confirmButtonText: '确认重置', cancelButtonText: '取消', type: 'warning' },
-    )
-        .then(() => {
-            store.resetProgress()
-            gitStore.resetProgress()
-            ElMessage.success('学习进度已重置')
-        })
-        .catch(() => {})
+  ElMessageBox.confirm(
+    '确定要重置全部学习进度吗？Docker 与 Git 的已完成章节、练习与测验记录都将被清除，此操作不可恢复。',
+    '重置学习进度',
+    { confirmButtonText: '确认重置', cancelButtonText: '取消', type: 'warning' },
+  )
+    .then(() => {
+      store.resetProgress()
+      gitStore.resetProgress()
+      ElMessage.success('学习进度已重置')
+    })
+    .catch(() => {})
 }
 </script>
 

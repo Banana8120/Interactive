@@ -112,50 +112,75 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { chapters } from '@/data/lessons'
 import { useProgressStore } from '@/stores/progress'
-import { saveDockerState, loadDockerState, clearDockerState, restoreBaseImages, resetEnvironment } from '@/terminal/simulator'
+import {
+  saveDockerState,
+  loadDockerState,
+  clearDockerState,
+  restoreBaseImages,
+  resetEnvironment
+} from '@/terminal/simulator'
+import type { DockerEnv, Lesson } from '@/types'
 import LessonContent from '@/components/LessonContent.vue'
 import QuizCard from '@/components/QuizCard.vue'
 import SimulatedTerminal from '@/components/SimulatedTerminal.vue'
 import DockerStatePanel from '@/components/DockerStatePanel.vue'
 import DockerTaskPanel from '@/components/DockerTaskPanel.vue'
 
+interface LessonWithChapter extends Lesson {
+  chapterId: string
+}
+
+interface SnapshotPayload {
+  env: DockerEnv
+  events: any[]
+  syncSeq: number
+}
+
 const route = useRoute()
 const router = useRouter()
 const store = useProgressStore()
 
 // Docker 拓扑视图状态（由 SimulatedTerminal 同步上来的快照）
-const dockerEnv = ref({ images: [], containers: [], volumes: [], networks: [] })
-const dockerEvents = ref([])
+const dockerEnv = ref<DockerEnv>({ images: [], containers: [], volumes: [], networks: [], history: [] })
+const dockerEvents = ref<any[]>([])
 const dockerSyncSeq = ref(0)
 
 // 当前练习面板联动状态
 const checkTick = ref(0)
 const errorStreak = ref(0)
 
-const allLessons = computed(() => chapters.flatMap((c) => c.lessons.map((l) => ({ ...l, chapterId: c.id }))))
+const allLessons = computed<LessonWithChapter[]>(() =>
+  chapters.flatMap((c) => c.lessons.map((l) => ({ ...l, chapterId: c.id })))
+)
 const index = computed(() => allLessons.value.findIndex((l) => l.id === route.params.lessonId))
-const lesson = computed(() => allLessons.value[index.value] || null)
+const lesson = computed<LessonWithChapter | null>(() => allLessons.value[index.value] || null)
 const chapter = computed(() => chapters.find((c) => c.id === lesson.value?.chapterId))
-const prevLesson = computed(() => index.value > 0 ? allLessons.value[index.value - 1] : null)
-const nextLesson = computed(() => index.value < allLessons.value.length - 1 ? allLessons.value[index.value + 1] : null)
+const prevLesson = computed(() => (index.value > 0 ? allLessons.value[index.value - 1] : null))
+const nextLesson = computed(() =>
+  index.value < allLessons.value.length - 1 ? allLessons.value[index.value + 1] : null
+)
 
 const terminalCommands = computed(() => lesson.value?.terminal?.commands || [])
 
-watch(lesson, (l) => {
-  if (l) {
-    // 优先恢复本课时缓存的 Docker 状态；无缓存则保留引擎当前状态
-    loadDockerState(l.id)
-    // 恢复课程基准镜像库，避免上一课时 rmi 删除的镜像影响本课时
-    restoreBaseImages()
-    store.setLastVisited(l.id)
-  }
-}, { immediate: true })
+watch(
+  lesson,
+  (l) => {
+    if (l) {
+      // 优先恢复本课时缓存的 Docker 状态；无缓存则保留引擎当前状态
+      loadDockerState(l.id)
+      // 恢复课程基准镜像库，避免上一课时 rmi 删除的镜像影响本课时
+      restoreBaseImages()
+      store.setLastVisited(l.id)
+    }
+  },
+  { immediate: true }
+)
 
 function markDone() {
   if (!lesson.value) return
@@ -171,12 +196,12 @@ function goNext() {
   if (nextLesson.value) router.push(`/lesson/${nextLesson.value.id}`)
 }
 
-function onQuizAnswered({ questionIndex, correct }) {
+function onQuizAnswered({ questionIndex, correct }: { questionIndex: number; correct: boolean }) {
   if (!lesson.value || !lesson.value.quiz) return
   store.recordQuiz(lesson.value.id, questionIndex, correct, lesson.value.quiz.length)
 }
 
-function onCommand({ ok, errorStreak: streak }) {
+function onCommand({ ok, errorStreak: streak }: { ok: boolean; errorStreak: number }) {
   // 更新连续错误计数与检测节拍，驱动“当前练习”面板自动检测
   errorStreak.value = streak || 0
   checkTick.value++
@@ -194,11 +219,11 @@ function onPracticeAutoDone() {
   ElMessage.success('练习已完成，本节自动标记为完成 🎉')
 }
 
-function onHintUsed(level) {
+function onHintUsed(level: number) {
   if (lesson.value) store.recordHint(lesson.value.id, level)
 }
 
-function onSnapshotSynced({ env, events, syncSeq }) {
+function onSnapshotSynced({ env, events, syncSeq }: SnapshotPayload) {
   dockerEnv.value = env || dockerEnv.value
   dockerEvents.value = events || []
   dockerSyncSeq.value = syncSeq || 0
@@ -214,7 +239,7 @@ function onResetEnvironment() {
     { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
   )
     .then(() => {
-      clearDockerState(lesson.value.id)
+      clearDockerState(lesson.value!.id)
       resetEnvironment()
       dockerEvents.value = []
       // SimulatedTerminal 会重新挂载并触发 snapshot-synced，父组件据此刷新

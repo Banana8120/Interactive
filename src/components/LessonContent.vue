@@ -62,24 +62,27 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ElMessage } from 'element-plus'
+import type { ContentBlock } from '@/types'
 
-const props = defineProps({
-  blocks: { type: Array, default: () => [] }
+const props = withDefaults(defineProps<{
+  blocks?: ContentBlock[]
+}>(), {
+  blocks: () => []
 })
 
 // 提示/警告块里的文本去 HTML 标签
-const plain = (t) => (t || '').replace(/<[^>]+>/g, '')
+const plain = (t?: string) => (t || '').replace(/<[^>]+>/g, '')
 
 // 表格/列表内容支持 <b> <code> 等轻量标签
-const rich = (t) => {
+const rich = (t?: string) => {
   let s = String(t || '')
   s = s.replace(/<code[^>]*>(.*?)<\/code>/g, '<code class="inline-code">$1</code>')
   return s
 }
 
-async function copyCode(code) {
+async function copyCode(code: string) {
   try {
     await navigator.clipboard.writeText(code)
     ElMessage.success('代码已复制到剪贴板')

@@ -86,32 +86,57 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { executeCommand, resetEnvironment, getEnvironment } from '@/terminal/simulator'
+import { executeCommand, getEnvironment } from '@/terminal/simulator'
+import type { DockerEnv } from '@/types'
 
-const props = defineProps({
-    suggestions: { type: Array, default: () => [] },
-    task: { type: String, default: '' },
-})
+interface TermBlock {
+  input?: string
+  error?: boolean
+  lines?: string[]
+  typing?: boolean
+}
 
-const emit = defineEmits(['command-executed', 'snapshot-synced', 'reset-environment'])
+interface TermEvent {
+  seq: number
+  input: string
+  ok: boolean
+  time: string
+}
 
-const outputRef = ref(null)
-const inputRef = ref(null)
+const props = withDefaults(
+  defineProps<{
+    suggestions?: string[]
+    task?: string
+  }>(),
+  {
+    suggestions: () => [],
+    task: ''
+  }
+)
+
+const emit = defineEmits<{
+  (e: 'command-executed', payload: { input: string; ok: boolean; errorStreak: number }): void
+  (e: 'snapshot-synced', payload: { env: DockerEnv; events: TermEvent[]; syncSeq: number }): void
+  (e: 'reset-environment'): void
+}>()
+
+const outputRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 const current = ref('')
-const history = ref([])
-const historyStack = ref([])
+const history = ref<TermBlock[]>([])
+const historyStack = ref<string[]>([])
 const historyIndex = ref(-1)
-const typingLines = ref([])
+const typingLines = ref<string[]>([])
 const busy = ref(false)
 // 连续错误次数（连续命令失败时递增，成功时归零），用于触发“卡住提示”
 const errorStreak = ref(0)
 
 // ---- 拓扑视图联动状态 ----
-const envSnapshot = ref({ images: [], containers: [], volumes: [], networks: [] })
-const recentEvents = ref([])
+const envSnapshot = ref<DockerEnv>({ images: [], containers: [], volumes: [], networks: [], history: [] })
+const recentEvents = ref<TermEvent[]>([])
 const syncSeq = ref(0)
 let eventSeq = 0
 
@@ -119,7 +144,7 @@ let eventSeq = 0
  * 同步快照：在终端输出渲染完成的同一时刻调用，
  * 将当前环境状态 emit 给父组件，由右侧悬浮抽屉渲染拓扑视图。
  */
-function syncSnapshot(input, ok) {
+function syncSnapshot(input?: string, ok = true) {
     envSnapshot.value = getEnvironment()
     if (input !== undefined) {
         const d = new Date()
@@ -148,7 +173,7 @@ function clearScreen() {
     scrollToBottom()
 }
 
-function pushBlock(block) {
+function pushBlock(block: TermBlock) {
     history.value.push(block)
     // 限制输出行数防止卡顿
     if (history.value.length > 300) history.value.splice(0, history.value.length - 300)
@@ -162,8 +187,8 @@ async function submit() {
     historyStack.value.push(input)
     historyIndex.value = -1
 
-    // 先回显输入行
-    const result = executeCommand(input)
+    // 命令结果形状多样（含 type / lines / delay），用 any 接收以兼容模拟引擎的宽松返回
+    const result: any = executeCommand(input)
     const isError = result.type === 'error'
     errorStreak.value = isError ? errorStreak.value + 1 : 0
     const ok = !isError
@@ -250,7 +275,7 @@ function autocomplete() {
     if (hit) current.value = hit
 }
 
-function quickRun(cmd) {
+function quickRun(cmd: string) {
     current.value = cmd
     submit()
 }
@@ -261,7 +286,7 @@ function resetEnv() {
 }
 
 // 简单语法高亮：字符串/数字/命令着色
-const highlight = (line) => {
+const highlight = (line: string): string => {
     if (!line) return '&nbsp;'
     let s = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     s = s.replace(/sha256:[0-9a-f]{6,}/g, '<span class="hl-hash">$&</span>')
