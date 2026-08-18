@@ -170,7 +170,7 @@ const g = computed(() => {
   const PAD = 14
   const IMG_W = 108, IMG_H = 42, IMG_GAP = 12
   const CTR_W = 112, CTR_H = 58, CTR_GAP = 14
-  const LANE_H = 104, LANE_GAP = 12
+  const LANE_GAP = 12
   const VOL_W = 52, VOL_H = 42, VOL_GAP = 14
   const COL_GAP = 28
 
@@ -185,49 +185,57 @@ const g = computed(() => {
   }))
   const imagesH = images.length ? images[images.length - 1].y + IMG_H - 14 : 0
 
-  // 2. 网络泳道：镜像右侧，容器在泳道内水平排布
-  const nets = env.networks.filter(n => !builtin.includes(n.name))
-  const bridgeFirst = [
-    ...nets.filter(n => n.name === 'bridge'),
-    ...nets.filter(n => n.name !== 'bridge')
-  ]
-  const laneX = imgColX + IMG_W + COL_GAP
-  const lanesY = 14
+    // 2. 网络泳道：镜像右侧，容器在泳道内垂直堆叠
+    const LANE_HEADER_H = 32
+    const LANE_MIN_H = 90
+    const nets = env.networks.filter(n => !builtin.includes(n.name))
+    const bridgeFirst = [
+      ...nets.filter(n => n.name === 'bridge'),
+      ...nets.filter(n => n.name !== 'bridge')
+    ]
+    const laneX = imgColX + IMG_W + COL_GAP
+    const lanesY = 14
 
-  const lanes = bridgeFirst.map((n, li) => {
-    const containers = env.containers.filter(c => (c.network || 'bridge') === n.name)
-    return {
+    const lanes = bridgeFirst.map((n, li) => ({
       name: n.name,
-      containers,
+      containers: env.containers.filter(c => (c.network || 'bridge') === n.name),
       color: LANE_COLORS[li % LANE_COLORS.length].color,
       tint: LANE_COLORS[li % LANE_COLORS.length].tint,
       x: laneX,
-      y: lanesY + li * (LANE_H + LANE_GAP),
-      w: 0,
-      h: LANE_H
-    }
-  })
+      y: 0,
+      w: Math.max(CTR_W + PAD * 2, 180),
+      h: 0
+    }))
 
-  const containers = []
-  lanes.forEach(lane => {
-    const n = lane.containers.length
-    lane.w = Math.max(n * (CTR_W + CTR_GAP) - CTR_GAP + PAD * 2, 180)
-    lane.containers.forEach((c, i) => {
-      containers.push({
-        ...c,
-        x: lane.x + PAD + i * (CTR_W + CTR_GAP),
-        y: lane.y + 32,
-        w: CTR_W,
-        h: CTR_H
+    // 先按容器数量计算每个泳道高度，再按高度累加确定 y
+    lanes.forEach(lane => {
+      const n = lane.containers.length
+      lane.h = Math.max(LANE_HEADER_H + n * (CTR_H + CTR_GAP) - CTR_GAP + PAD, LANE_MIN_H)
+    })
+    let currentLaneY = lanesY
+    lanes.forEach(lane => {
+      lane.y = currentLaneY
+      currentLaneY += lane.h + LANE_GAP
+    })
+
+    const containers: any[] = []
+    lanes.forEach(lane => {
+      lane.containers.forEach((c, i) => {
+        containers.push({
+          ...c,
+          x: lane.x + PAD,
+          y: lane.y + LANE_HEADER_H + i * (CTR_H + CTR_GAP),
+          w: CTR_W,
+          h: CTR_H
+        })
       })
     })
-  })
-  const lanesW = lanes.length ? Math.max(...lanes.map(l => l.w)) : 180
-  const lanesH = lanes.length * (LANE_H + LANE_GAP) - LANE_GAP
-  lanes.forEach(l => { l.w = Math.max(lanesW, 180) })
+
+    const lanesW = lanes.length ? Math.max(...lanes.map(l => l.w)) : 180
+    lanes.forEach(l => { l.w = Math.max(lanesW, 180) })
 
   // 3. 数据卷层：底部
-  const lanesBottom = lanes.length ? lanes[lanes.length - 1].y + LANE_H : lanesY
+  const lanesBottom = lanes.length ? lanes[lanes.length - 1].y + lanes[lanes.length - 1].h : lanesY
   const volsY = Math.max(imagesH + 14, lanesBottom) + 28
 
   const volumes = env.volumes.map((v, i) => ({
@@ -249,10 +257,11 @@ const g = computed(() => {
     const im = imgMap.get(c.image)
     if (!im) continue
     const x1 = im.x + im.w, y1 = im.y + im.h / 2
-    const x2 = c.x + c.w / 2, y2 = c.y
+    // 容器改为纵向排列后，连线终点改为容器左侧中点
+    const x2 = c.x, y2 = c.y + c.h / 2
     imgEdges.push({
       key: 'ie-' + c.id,
-      d: `M ${x1} ${y1} C ${x1 + 22} ${y1}, ${x2} ${y2 - 24}, ${x2} ${y2}`
+      d: `M ${x1} ${y1} C ${x1 + 22} ${y1}, ${x2 - 22} ${y2}, ${x2} ${y2}`
     })
   }
 
