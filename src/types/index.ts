@@ -159,8 +159,10 @@ export interface GitCommit {
   hash: string
   msg: string
   author: string
+  email: string
   date: string
   parent: string | null
+  files: Record<string, any>
 }
 
 export interface GitRemote {
@@ -170,7 +172,9 @@ export interface GitRemote {
 
 export interface GitStash {
   msg: string
-  files: Record<string, any>
+  branch?: string
+  staged?: Record<string, any>
+  workdir?: Record<string, any>
 }
 
 export interface GitState {
@@ -182,11 +186,14 @@ export interface GitState {
   head: string
   detached: boolean
   detachedAt: string | null
-  branches: Record<string, string>
+  branches: Record<string, string | null>
   commits: Record<string, GitCommit>
-  index: Record<string, any>
-  working: Record<string, any>
+  staged: Record<string, any>
+  workdir: Record<string, any>
   remotes: Record<string, GitRemote>
   stash: GitStash[]
   tags: Record<string, string>
+  reflog: any[]
+  mergeState: any
+  cherryPickState: any
 }

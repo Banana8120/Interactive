@@ -210,6 +210,22 @@ function parentTreeOf(hash) {
   return c ? { ...c.files } : {}
 }
 
+/** 查找两个提交的最近共同祖先（merge base），用于真正的三方合并 */
+function findMergeBase(hashA, hashB) {
+  const ancestors = new Set()
+  let h = hashA
+  while (h) {
+    ancestors.add(h)
+    h = state.commits[h]?.parent || null
+  }
+  h = hashB
+  while (h) {
+    if (ancestors.has(h)) return h
+    h = state.commits[h]?.parent || null
+  }
+  return null
+}
+
 function pushReflog(msg) {
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')
@@ -246,6 +262,53 @@ function treeDiff(a, b) {
     if ((a[k] ?? null) !== (b[k] ?? null)) changed.push(k)
   }
   return changed.sort()
+}
+
+/** 逐行对比两份文件内容，估算新增/删除行数（驱动 commit/push/merge 的动态统计输出） */
+function countLineChanges(oldText, newText) {
+  const oldLines = (oldText || '').split('\n').filter((l) => l !== '')
+  const newLines = (newText || '').split('\n').filter((l) => l !== '')
+  const oldSet = new Set(oldLines)
+  const newSet = new Set(newLines)
+  let insertions = 0
+  let deletions = 0
+  for (const l of newLines) if (!oldSet.has(l)) insertions++
+  for (const l of oldLines) if (!newSet.has(l)) deletions++
+  return { insertions, deletions }
+}
+
+/** 计算两份树之间的变更摘要：{ files, count, insertions, deletions } */
+function changeTotals(oldTree, newTree) {
+  const files = treeDiff(oldTree, newTree)
+  let insertions = 0
+  let deletions = 0
+  for (const p of files) {
+    const r = countLineChanges(oldTree[p], newTree[p])
+    insertions += r.insertions
+    deletions += r.deletions
+  }
+  return { files, count: files.length, insertions, deletions }
+}
+
+/** 生成类似真实 Git 的 diffstat 行：` file | N +-` + 汇总行 */
+function diffStatLines(oldTree, newTree) {
+  const { files, insertions, deletions } = changeTotals(oldTree, newTree)
+  const lines = []
+  for (const p of files) {
+    const r = countLineChanges(oldTree[p], newTree[p])
+    const n = r.insertions + r.deletions
+    const bar = '+'.repeat(Math.min(r.insertions, 8)) + '-'.repeat(Math.min(r.deletions, 8))
+    lines.push(` ${p.padEnd(20)} | ${String(n).padStart(3)} ${bar}`)
+  }
+  if (files.length) {
+    lines.push(` ${files.length} file(s) changed, ${insertions} insertion(s)(+), ${deletions} deletion(s)(-)`)
+  }
+  return lines
+}
+
+/** 估算仓库对象数：文件 blob + 目录树 + 提交 */
+function repoObjectCount(fileCount, commitCount = 1) {
+  return Math.max(3, fileCount + 1 + commitCount)
 }
 
 function fmtStatusLine(path, state2) {
@@ -303,11 +366,15 @@ function runGit(args) {
   if (sub === 'remote') return gitRemote(rest)
   if (sub === 'push') return gitPush(rest)
   if (sub === 'pull') return gitPull(rest)
+  if (sub === 'fetch') return gitFetch(rest)
   if (sub === 'tag') return gitTag(rest)
   if (sub === 'stash') return gitStash(rest)
   if (sub === 'reset') return gitReset(rest)
+  if (sub === 'restore') return gitRestore(rest)
   if (sub === 'revert') return gitRevert(rest)
   if (sub === 'cherry-pick') return gitCherryPick(rest)
+  if (sub === 'rebase') return gitRebase(rest)
+  if (sub === 'clean') return gitClean(rest)
   if (sub === 'reflog') return gitReflog(rest)
   if (sub === 'rm') return gitRm(rest)
   if (sub === 'mv') return gitMv(rest)
@@ -325,7 +392,7 @@ function runGit(args) {
   return { type: 'error', lines: [`git: '${sub}' is not a git command. See 'git --help'.`, '输入 "git help" 查看支持的命令列表。'] }
 }
 
-const KNOWN_SUBS = ['init', 'config', 'status', 'add', 'commit', 'log', 'diff', 'branch', 'checkout', 'switch', 'merge', 'remote', 'push', 'pull', 'tag', 'stash', 'reset', 'revert', 'cherry-pick', 'reflog', 'rm', 'mv', 'show', 'clone', 'help', 'version']
+const KNOWN_SUBS = ['init', 'config', 'status', 'add', 'commit', 'log', 'diff', 'branch', 'checkout', 'switch', 'merge', 'rebase', 'remote', 'fetch', 'push', 'pull', 'tag', 'stash', 'reset', 'restore', 'revert', 'cherry-pick', 'reflog', 'rm', 'mv', 'show', 'clean', 'clone', 'help', 'version']
 
 function suggestFix(sub) {
   for (const k of KNOWN_SUBS) {
@@ -335,7 +402,8 @@ function suggestFix(sub) {
     comit: 'commit', cmmit: 'commit', commmit: 'commit', staus: 'status', statsu: 'status',
     ad: 'add', addd: 'add', brnach: 'branch', branh: 'branch', checkot: 'checkout',
     chckout: 'checkout', merget: 'merge', marge: 'merge', pulll: 'pull', puch: 'push',
-    tagg: 'tag', logg: 'log', stah: 'stash', resset: 'reset', rest: 'reset', branc: 'branch'
+    tagg: 'tag', logg: 'log', stah: 'stash', resset: 'reset', rest: 'reset', branc: 'branch',
+    restor: 'restore', fetchh: 'fetch', rebbase: 'rebase'
   }
   return map[sub] || null
 }
@@ -352,22 +420,30 @@ function gitInit(args) {
     return { type: 'output', lines: ['Reinitialized existing Git repository in /home/learner/git-project/.git/'] }
   }
   state.initialized = true
-  return {
-    type: 'output',
-    lines: [
-      "hint: Using 'master' as the name for the initial branch. This default branch name",
-      'hint: is subject to change. To configure the initial branch name to use in all',
-      'hint: of your new repositories, which will suppress this warning, call:',
+  const hasIdentity = state.config.user.name && state.config.user.email
+  const lines = [
+    "hint: Using 'master' as the name for the initial branch. This default branch name",
+    'hint: is subject to change. To configure the initial branch name to use in all',
+    'hint: of your new repositories, which will suppress this warning, call:',
+    '',
+    'hint:   git config --global init.defaultBranch master',
+    '',
+    "Initialized empty Git repository in /home/learner/git-project/.git/"
+  ]
+  if (hasIdentity) {
+    lines.push(
       '',
-      'hint:   git config --global init.defaultBranch master',
-      '',
-      "Initialized empty Git repository in /home/learner/git-project/.git/",
+      `✅ 仓库已初始化！身份信息已配置 (${state.config.user.name} <${state.config.user.email}>)。`
+    )
+  } else {
+    lines.push(
       '',
       '✅ 仓库已初始化！接下来配置你的身份信息：',
       '   git config --global user.name "你的名字"',
       '   git config --global user.email "你的邮箱"'
-    ]
+    )
   }
+  return { type: 'output', lines }
 }
 
 function gitConfig(args) {
@@ -542,13 +618,16 @@ function gitCommit(args) {
     if (v === null) delete tree[p]
     else tree[p] = v
   }
+  // 精确统计本次提交的变更（对比父提交树，而非整个仓库文件数）
+  const parent = headCommit()?.hash || null
+  const totals = changeTotals(parentTreeOf(parent), tree)
   const commit = newCommit(msg, tree)
   state.staged = {}
   return {
     type: 'output',
     lines: [
       `[${state.head} ${commit.hash}] ${msg}`,
-      ` ${Object.keys(commit.files).length} file(s) changed`,
+      ` ${totals.count} file(s) changed, ${totals.insertions} insertion(s)(+), ${totals.deletions} deletion(s)(-)`,
       '✅ 提交成功！提交历史已更新。'
     ],
     delay: 300
@@ -668,27 +747,57 @@ function gitBranch(args) {
   return { type: 'output', lines: [`✅ 已创建分支 ${name}（指向 ${head ? head.hash.slice(0, 7) : '暂无提交'}）`, '提示：用 git checkout <分支名> 或 git switch <分支名> 切换到该分支。'] }
 }
 
-function switchToBranch(name, create) {
+function switchToBranch(name, create, startPoint) {
   const from = state.head
   if (create) {
     if (branchExists(name)) return { type: 'error', lines: [`fatal: A branch named '${name}' already exists.`] }
-    state.branches[name] = headCommit()?.hash || null
+    const start = startPoint ? resolveRef(startPoint) : headCommit()?.hash || null
+    if (startPoint && !start) return { type: 'error', lines: [`fatal: invalid reference: '${startPoint}'`] }
+    const oldTree = headTree()
+    const oldWorkdir = { ...state.workdir }
+    const oldStaged = { ...state.staged }
+    state.branches[name] = start
     state.head = name
     state.detached = false
+    if (startPoint) {
+      // 从指定起点创建：工作区同步为起点树（保留未跟踪文件），清空暂存区
+      const keep = {}
+      for (const p of Object.keys(oldWorkdir)) {
+        if (!Object.prototype.hasOwnProperty.call(oldTree, p) && !Object.prototype.hasOwnProperty.call(oldStaged, p)) {
+          keep[p] = oldWorkdir[p]
+        }
+      }
+      state.workdir = { ...parentTreeOf(start), ...keep }
+      state.staged = {}
+    }
     pushReflog(`checkout: moving from ${from} to ${name}`)
     return { type: 'output', lines: [`✅ 已创建并切换到分支 ${name}`, '提示：可用 git branch 查看当前所有分支（* 表示当前分支）。'] }
   }
   if (!branchExists(name)) {
     return { type: 'error', lines: [`error: pathspec '${name}' did not match any file(s) known to git`, `提示：分支 ${name} 不存在。先 git branch ${name} 创建，或用 git checkout -b ${name} 创建并切换。`] }
   }
-  // 有未提交的修改时阻止切换（只检查已跟踪文件，untracked 不阻止）
+  // 有未提交的修改时阻止切换：未提交改动 = 工作区相对暂存区(index)的差异（真实 git 语义）
   const tree = headTree()
-  const dirty = Object.keys(tree).some((p) => (state.workdir[p] ?? null) !== tree[p])
+  const dirty = Object.keys(tree).some((p) => {
+    const indexVal = Object.prototype.hasOwnProperty.call(state.staged, p) ? state.staged[p] : tree[p]
+    return (state.workdir[p] ?? null) !== indexVal
+  })
   if (dirty) {
     return { type: 'error', lines: ['error: Your local changes would be overwritten by checkout.', '提示：当前工作区有未提交的修改。先 git add + git commit，或 git stash 暂存，再切换分支。'] }
   }
   state.head = name
   state.detached = false
+  // 切换后同步工作区到目标分支内容（保留未跟踪文件），并清空暂存区 —— 与真实 git 一致
+  const oldTree = tree
+  const targetTree = parentTreeOf(state.branches[name])
+  const keep = {}
+  for (const p of Object.keys(state.workdir)) {
+    if (!Object.prototype.hasOwnProperty.call(oldTree, p) && !Object.prototype.hasOwnProperty.call(state.staged, p)) {
+      keep[p] = state.workdir[p]
+    }
+  }
+  state.workdir = { ...targetTree, ...keep }
+  state.staged = {}
   pushReflog(`checkout: moving from ${from} to ${name}`)
   return { type: 'output', lines: [`✅ 已切换到分支 ${name}`, '提示：当前 HEAD 指向 ' + name + '，可用 git status 确认。'] }
 }
@@ -696,9 +805,9 @@ function switchToBranch(name, create) {
 function gitCheckout(args) {
   const req = requireInit()
   if (req) return req
-  if (!args.length) return { type: 'error', lines: ['用法: git checkout <分支> | git checkout -b <新分支> | git checkout -- <file>'] }
+  if (!args.length) return { type: 'error', lines: ['用法: git checkout <分支> | git checkout -b <新分支> [<起点>] | git checkout -- <file>'] }
   if (args[0] === '-b') {
-    return switchToBranch(args[1], true)
+    return switchToBranch(args[1], true, args[2])
   }
   if (args[0] === '--') {
     const file = args[1]
@@ -720,7 +829,7 @@ function gitSwitch(args) {
   const req = requireInit()
   if (req) return req
   if (!args.length) return { type: 'error', lines: ['用法: git switch <分支> | git switch -c <新分支>'] }
-  if (args[0] === '-c' || args[0] === '--create') return switchToBranch(args[1], true)
+  if (args[0] === '-c' || args[0] === '--create') return switchToBranch(args[1], true, args[2])
   return switchToBranch(args[0], false)
 }
 
@@ -739,54 +848,80 @@ function gitMerge(args) {
   const targetCommit = state.commits[target]
   const curCommit = state.commits[cur]
 
-  // 判断是否为 fast-forward（当前分支是目标分支的祖先）
-  let isAncestor = false
-  let walk = target
-  while (walk) {
-    if (walk === cur) { isAncestor = true; break }
-    walk = state.commits[walk]?.parent || null
+  // 目标分支是当前分支的祖先 → 已是最新，无需合并
+  let isTargetAncestor = false
+  let w = cur
+  while (w) {
+    if (w === target) { isTargetAncestor = true; break }
+    w = state.commits[w]?.parent || null
+  }
+  if (isTargetAncestor) {
+    return { type: 'output', lines: ['Already up to date.', `（${state.head} 已包含 ${name} 的全部提交）`] }
   }
 
-  if (isAncestor) {
+  // 当前分支是目标分支的祖先 → fast-forward 快进
+  let isCurAncestor = false
+  w = target
+  while (w) {
+    if (w === cur) { isCurAncestor = true; break }
+    w = state.commits[w]?.parent || null
+  }
+  if (isCurAncestor) {
     state.branches[state.head] = target
     pushReflog(`merge ${name}: Fast-forward`)
+    const statLines = diffStatLines(curCommit.files, targetCommit.files)
     return {
       type: 'output',
       lines: [
         `Updating ${cur.slice(0, 7)}..${target.slice(0, 7)}`,
         'Fast-forward',
+        ...statLines,
         `✅ 已快进合并：${state.head} 分支直接指向了 ${name} 的最新提交。`,
         '提示：git log --oneline 查看合并后的提交历史。'
       ]
     }
   }
 
-  // 模拟三方合并：合并文件树（简化，同名冲突用 target 内容）
-  const mergedFiles = { ...curCommit.files }
-  let conflict = false
-  for (const [p, v] of Object.entries(targetCommit.files)) {
-    if (mergedFiles[p] !== undefined && mergedFiles[p] !== v) {
-      // 简化为冲突：保留当前分支内容并标记冲突提示
-      conflict = true
+  // 真正的三方合并：以 merge base 为基准，逐文件按 3 路规则判断
+  const baseHash = findMergeBase(cur, target)
+  const baseTree = baseHash ? parentTreeOf(baseHash) : {}
+  const mergedFiles = {}
+  const conflictFiles = []
+  const paths = new Set([
+    ...Object.keys(baseTree),
+    ...Object.keys(curCommit.files),
+    ...Object.keys(targetCommit.files)
+  ])
+  for (const p of paths) {
+    const b = baseTree[p] ?? null   // 合并基点版本
+    const o = curCommit.files[p] ?? null  // 当前分支版本（ours）
+    const t = targetCommit.files[p] ?? null // 待合并分支版本（theirs）
+    if (o === t) {
+      // 两边一致：保留该内容（或都不存在 → 删除）
+      if (o !== null) mergedFiles[p] = o
+    } else if (o === b) {
+      // 只有目标分支改了 → 采纳 theirs
+      if (t !== null) mergedFiles[p] = t
+    } else if (t === b) {
+      // 只有当前分支改了 → 保留 ours
+      if (o !== null) mergedFiles[p] = o
     } else {
-      mergedFiles[p] = v
+      // 双方都改且改得不同（含 增/增 冲突、改/删 冲突）→ 冲突
+      conflictFiles.push(p)
+      if (o !== null) mergedFiles[p] = o
     }
-  }
-  // 目标分支删除的文件
-  for (const p of Object.keys(curCommit.files)) {
-    if (targetCommit.files[p] === undefined) delete mergedFiles[p]
   }
 
-  if (conflict) {
-    return {
-      type: 'error',
-      lines: [
-        `Auto-merging conflicts (simulated)`,
-        `CONFLICT: merge conflict in files (simulated)`,
-        '提示：真实 Git 中需要手动解决冲突；本模拟环境为教学简化，',
-        '建议先用 git log --oneline 观察分支差异，再尝试合并。'
-      ]
-    }
+  if (conflictFiles.length) {
+    const lines = []
+    for (const p of conflictFiles) lines.push(`Auto-merging ${p}`)
+    for (const p of conflictFiles) lines.push(`CONFLICT (content): Merge conflict in ${p}`)
+    lines.push(
+      'Automatic merge failed; fix conflicts and then commit the result.',
+      '提示：真实 Git 中需要手动解决冲突。可先用 git status 查看冲突文件，',
+      '或 git merge --abort 取消本次合并。'
+    )
+    return { type: 'error', lines }
   }
 
   const hash = randomHash()
@@ -801,10 +936,12 @@ function gitMerge(args) {
   }
   state.branches[state.head] = hash
   pushReflog(`merge ${name}: Merge made by the 'ort' strategy.`)
+  const statLines = diffStatLines(curCommit.files, mergedFiles)
   return {
     type: 'output',
     lines: [
       `Merge made by the 'ort' strategy.`,
+      ...statLines,
       `✅ 合并完成！${name} 的内容已合并到 ${state.head}。`,
       '提示：git log --oneline 查看新的合并提交。'
     ]
@@ -843,15 +980,31 @@ function gitPush(args) {
   if (!head) return { type: 'error', lines: ['error: src refspec master does not match any', '提示：本地还没有提交，先 git commit。'] }
   const remote = state.remotes[remoteName]
   const localHash = state.branches[state.head]
+  const remoteBefore = remote.branches[state.head] || null
+  // 本次推送的对象数：远程缺失的提交数 + 这些提交改动的文件 blob + 目录树，动态计算
+  const newCommits = []
+  let h = localHash
+  while (h && h !== remoteBefore) {
+    newCommits.push(h)
+    h = state.commits[h]?.parent || null
+  }
+  const changedFiles = new Set()
+  for (const hc of newCommits) {
+    const c = state.commits[hc]
+    for (const p of treeDiff(parentTreeOf(c.parent), c.files)) changedFiles.add(p)
+  }
+  const objectCount = repoObjectCount(changedFiles.size, newCommits.length)
   remote.branches[state.head] = localHash
+  const from = remoteBefore ? remoteBefore.slice(0, 7) : '0000000'
   return {
     type: 'output',
     lines: [
-      `Enumerating objects: 5, done.`,
-      `Writing objects: 100% (5/5), done.`,
+      `Enumerating objects: ${objectCount}, done.`,
+      `Counting objects: 100% (${objectCount}/${objectCount}), done.`,
+      `Writing objects: 100% (${objectCount}/${objectCount}), done.`,
       `To ${remote.url}`,
-      `   ${head.parent ? state.commits[head.parent].hash.slice(0, 7) : '0000000'}..${localHash.slice(0, 7)}  ${state.head} -> ${state.head}`,
-      `✅ 已推送！本地 ${state.head} 分支已同步到远程 ${remoteName}。`
+      `   ${from}..${localHash.slice(0, 7)}  ${state.head} -> ${state.head}`,
+      `✅ 已推送！本地 ${state.head} 分支已同步到远程 ${remoteName}（${newCommits.length} 个提交）。`
     ],
     delay: 400
   }
@@ -883,6 +1036,52 @@ function gitPull(args) {
   return { type: 'output', lines: ['Already up to date.'] }
 }
 
+/**
+ * git fetch：从远程下载引用（只更新远程跟踪分支，不动工作区/本地分支）
+ *   输出由 remote.url 与 remote.branches 数据驱动
+ */
+function gitFetch(args) {
+  const req = requireInit()
+  if (req) return req
+  const remoteName = args.find((a) => !a.startsWith('-')) || 'origin'
+  const remote = state.remotes[remoteName]
+  if (!remote) {
+    return {
+      type: 'error',
+      lines: [
+        `fatal: '${remoteName}' does not appear to be a git repository`,
+        `fatal: Could not read from remote repository.`,
+        '提示：先 git remote add origin <url> 配置远程仓库。'
+      ]
+    }
+  }
+  const refs = Object.entries(remote.branches)
+  const lines = [`From ${remote.url}`]
+  let updated = 0
+  for (const [br, hash] of refs) {
+    const local = state.branches[br]
+    const isNew = !local
+    if (isNew) {
+      lines.push(` * [new branch]      ${br} -> origin/${br}`)
+      updated++
+    } else if (local !== hash && state.commits[hash]) {
+      lines.push(`   ${local.slice(0, 7)}..${hash.slice(0, 7)}  ${br} -> origin/${br}`)
+      updated++
+    } else {
+      lines.push(`   ${br} -> origin/${br}`)
+    }
+  }
+  lines.push('')
+  if (updated) {
+    lines.push(`✅ 已从 ${remoteName} 获取 ${updated} 个分支更新（仅更新远程跟踪分支，工作区与本地分支未改动）。`)
+    lines.push('提示：git merge origin/<分支> 或 git pull 可将远程更新合并到本地。')
+  } else {
+    lines.push('Already up to date.')
+    lines.push('提示：git fetch 只下载引用，不合并；配合 git merge origin/<分支> 使用。')
+  }
+  return { type: 'output', lines }
+}
+
 function gitClone(args) {
   const url = args.find((a) => !a.startsWith('-')) || 'https://gitee.com/learner/git-project.git'
   state.initialized = true
@@ -902,12 +1101,15 @@ function gitClone(args) {
   state.staged = {}
   state.remotes = { origin: { url, branches: { master: baseHash } } }
   pushReflog(`clone: from ${url}`)
+  // 克隆对象数 = 文件 blob + 目录树 + 提交，随仓库内容动态计算
+  const objectCount = repoObjectCount(Object.keys(INITIAL_FILES).length, 1)
   return {
     type: 'output',
     lines: [
       `Cloning into 'git-project'...`,
-      'remote: Enumerating objects: 5, done.',
-      'Receiving objects: 100% (5/5), done.',
+      `remote: Enumerating objects: ${objectCount}, done.`,
+      `remote: Counting objects: 100% (${objectCount}/${objectCount}), done.`,
+      `Receiving objects: 100% (${objectCount}/${objectCount}), done.`,
       `✅ 克隆完成！已从 ${url} 拉取仓库到本地。`,
       '提示：git log --oneline 查看提交历史。'
     ],
@@ -1020,6 +1222,117 @@ function gitReset(args) {
   }
 }
 
+// 索引（index）中某路径的内容：staged 有记录则取其值，否则与 HEAD 一致
+function indexContentOf(p, headTreeCache) {
+  if (Object.prototype.hasOwnProperty.call(state.staged, p)) return state.staged[p]
+  return headTreeCache[p] !== undefined ? headTreeCache[p] : undefined
+}
+
+/**
+ * git restore：从暂存区/HEAD/指定提交恢复工作区或暂存区（数据驱动）
+ *   git restore <file>                丢弃工作区改动，恢复为暂存区（index）版本
+ *   git restore --staged <file>       取消暂存（unstage），恢复为 HEAD 版本
+ *   git restore --source=<ref> <file> 从指定提交恢复
+ *   git restore . / git restore --staged .   批量恢复
+ */
+function gitRestore(args) {
+  const req = requireInit()
+  if (req) return req
+  const stagedOnly = args.includes('--staged') || args.includes('-S')
+  const srcFlag = args.some((a) => a.startsWith('--source=') || /^-s\S+/.test(a))
+  const sourceRef = (() => {
+    const eq = args.find((a) => a.startsWith('--source='))
+    if (eq) return eq.slice('--source='.length) || 'HEAD'
+    const s = args.find((a) => /^-s\S+/.test(a))
+    return s ? s.slice(2) : 'HEAD'
+  })()
+  const rawPaths = args.filter((a) => !a.startsWith('-'))
+  const dot = rawPaths.includes('.')
+  const tree = headTree()
+  const known = dot
+    ? [...new Set([...Object.keys(tree), ...Object.keys(state.staged)])]
+    : rawPaths.filter((p) => p !== '.')
+
+  if (!known.length) {
+    return {
+      type: 'error',
+      lines: [
+        '用法: git restore [--staged] [--source=<提交>] <file>...',
+        '示例:',
+        '  git restore app.js              # 丢弃工作区修改，恢复为暂存区版本',
+        '  git restore --staged app.js     # 取消暂存（unstage），保留工作区改动',
+        '  git restore --source=HEAD~1 app.js   # 从上一个提交恢复该文件',
+        '  git restore . / git restore --staged .   # 批量恢复全部'
+      ]
+    }
+  }
+
+  // 解析 source 树
+  let srcTree
+  if (sourceRef === 'HEAD') {
+    srcTree = tree
+  } else {
+    const hash = resolveRef(sourceRef)
+    if (!hash) return { type: 'error', lines: [`fatal: invalid reference: ${sourceRef}`] }
+    srcTree = parentTreeOf(hash)
+  }
+
+  // pathspec 校验：未被 git 认识的路径整体报错（真实 git 行为：不执行任何恢复）
+  const missing = known.filter((p) => {
+    const inIndex = indexContentOf(p, tree) !== undefined
+    const inHead = Object.prototype.hasOwnProperty.call(tree, p)
+    const inStaged = Object.prototype.hasOwnProperty.call(state.staged, p)
+    return !inIndex && !inHead && !inStaged
+  })
+  if (missing.length) {
+    return { type: 'error', lines: [`fatal: pathspec '${missing[0]}' did not match any file(s) known to git`, '提示：git restore 只能恢复已被跟踪（提交过或已暂存）的文件。'] }
+  }
+
+  const restored = []
+  const untouched = []
+  for (const p of known) {
+    const srcVal = srcTree[p]          // source 中该路径的内容（undefined = source 中不存在）
+    const indexVal = indexContentOf(p, tree)  // 当前 index 内容
+    let changed = false
+    if (stagedOnly) {
+      // 恢复暂存区：staged[p] = source 内容
+      const cur = Object.prototype.hasOwnProperty.call(state.staged, p) ? state.staged[p] : undefined
+      if (srcVal === undefined) {
+        if (cur !== undefined) { delete state.staged[p]; changed = true }
+      } else if (cur !== srcVal) {
+        state.staged[p] = srcVal
+        changed = true
+      }
+    } else {
+      // 恢复工作区：workdir[p] = index 内容（默认）或 source 内容
+      const target = srcFlag ? srcVal : indexVal
+      const cur = Object.prototype.hasOwnProperty.call(state.workdir, p) ? state.workdir[p] : undefined
+      if (target === undefined) {
+        if (cur !== undefined) { delete state.workdir[p]; changed = true }
+      } else if (cur !== target) {
+        state.workdir[p] = target
+        changed = true
+      }
+    }
+    if (changed) restored.push(p)
+    else untouched.push(p)
+  }
+
+  const lines = []
+  for (const p of restored) lines.push(`restored '${p}'`)
+  if (restored.length) {
+    lines.push(
+      stagedOnly
+        ? `✅ 已取消暂存 ${restored.length} 个文件（工作区改动保留）。git status 可确认。`
+        : `✅ 已恢复 ${restored.length} 个文件。git status 可确认工作区已干净。`
+    )
+  }
+  if (untouched.length) {
+    lines.push(`提示：${untouched.map((p) => `'${p}'`).join('、')} 与要恢复的版本一致，无需恢复。`)
+  }
+  return { type: 'output', lines }
+}
+
 function gitRevert(args) {
   const req = requireInit()
   if (req) return req
@@ -1032,14 +1345,16 @@ function gitRevert(args) {
   if (hash === head.hash) return { type: 'error', lines: ['error: cannot revert the current commit', '提示：选择一个更早的提交来撤销。'] }
   const targetCommit = state.commits[hash]
   const newTree = { ...head.files }
-  // 简单反推：用目标的父树内容覆盖目标改动过的文件
-  const parentTree = parentTreeOf(hash)
-  for (const p of Object.keys(targetCommit.files)) {
+  // 反推：用目标提交的父树内容覆盖目标改动过的文件（撤销该提交的改动）
+  const parentTree = targetCommit.parent ? parentTreeOf(targetCommit.parent) : {}
+  const changed = treeDiff(parentTree, targetCommit.files)
+  for (const p of changed) {
     if (parentTree[p] === undefined) delete newTree[p]
     else newTree[p] = parentTree[p]
   }
   const c = newCommit(`Revert "${targetCommit.msg}"`, newTree)
   state.staged = {}
+  state.workdir = { ...newTree } // revert 后工作区同步为新树（真实 git 行为）
   return {
     type: 'output',
     lines: [
@@ -1062,11 +1377,12 @@ function gitCherryPick(args) {
   const head = headCommit()
   if (!head) return { type: 'error', lines: ['fatal: Failed to resolve \'HEAD\' as a valid ref.'] }
   if (hash === head.hash) return { type: 'error', lines: [`error: cannot cherry-pick the current commit`] }
-  // 应用目标提交的变更到当前树
-  const parentTree = parentTreeOf(hash)
+  // 应用目标提交的变更集到当前树（基于目标提交相对其父树的差异）
+  const parentTree = tc.parent ? parentTreeOf(tc.parent) : {}
   const newTree = { ...head.files }
-  for (const p of Object.keys(tc.files)) {
-    if (parentTree[p] === undefined) delete newTree[p]
+  const changed = treeDiff(parentTree, tc.files)
+  for (const p of changed) {
+    if (tc.files[p] === undefined) delete newTree[p]
     else newTree[p] = tc.files[p]
   }
   const c = newCommit(tc.msg, newTree)
@@ -1079,6 +1395,118 @@ function gitCherryPick(args) {
       '提示：git log --oneline 查看 cherry-pick 之后的提交历史。'
     ]
   }
+}
+
+/**
+ * git rebase：把当前分支独有提交重放到目标分支之上（数据驱动的简化三方变基）
+ *   冲突判定：重放时若目标分支已改动同一路径（与共同祖先不同）→ 冲突中止
+ */
+function gitRebase(args) {
+  const req = requireInit()
+  if (req) return req
+  const target = args.find((a) => !a.startsWith('-'))
+  if (!target) {
+    return { type: 'error', lines: ['用法: git rebase <分支>', '示例: git rebase master  （把当前分支的提交重放到 master 之上，历史变线性）'] }
+  }
+  const targetHash = resolveRef(target)
+  if (!targetHash) return { type: 'error', lines: [`fatal: invalid upstream '${target}'`] }
+  const cur = headCommit()
+  if (!cur) return { type: 'error', lines: ['fatal: Failed to resolve \'HEAD\' as a valid ref.'] }
+  if (cur.hash === targetHash) return { type: 'output', lines: [`Current branch ${state.head} is up to date.`] }
+
+  const base = findMergeBase(cur.hash, targetHash)
+  if (!base) return { type: 'error', lines: ['fatal: no common ancestor', '提示：变基需要两个分支有共同祖先提交。'] }
+
+  // 收集当前分支独有提交（从旧到新，不含 base）
+  const own = []
+  let h = cur.hash
+  while (h && h !== base) {
+    own.push(h)
+    h = state.commits[h]?.parent || null
+  }
+  own.reverse()
+  if (!own.length) return { type: 'output', lines: [`Current branch ${state.head} is up to date.`] }
+
+  // 逐提交重放：目标树 + 变更集，冲突检测以 merge-base 为基准（三方语义）
+  const baseTree = parentTreeOf(base)
+  const newTree = { ...parentTreeOf(targetHash) }
+  const savedHead = state.branches[state.head]
+  // 临时把分支起点移到 target，使 newCommit 的 parent 链按重放顺序衔接
+  state.branches[state.head] = targetHash
+  let replayed = 0
+  for (const oh of own) {
+    const oc = state.commits[oh]
+    // 注意：parentTreeOf(hash) 返回的是 hash 提交自身的树；父树需显式取 commits[parent]
+    const op = oc.parent ? parentTreeOf(oc.parent) : {}
+    const changedPaths = treeDiff(op, oc.files)
+    for (const p of changedPaths) {
+      if (newTree[p] !== baseTree[p]) {
+        state.branches[state.head] = savedHead // 冲突中止：恢复分支原指向
+        return {
+          type: 'error',
+          lines: [
+            `CONFLICT (content): Merge conflict in ${p} during rebase`,
+            `提示：变基到 ${target} 时，${p} 在两边都被修改。`,
+            '真实 Git 中需解决冲突后 git rebase --continue；本模拟环境建议',
+            '先 git log --oneline 观察差异，或用 git rebase --abort 取消变基。'
+          ]
+        }
+      }
+    }
+    for (const p of changedPaths) {
+      if (oc.files[p] === undefined) delete newTree[p]
+      else newTree[p] = oc.files[p]
+    }
+    newCommit(oc.msg, { ...newTree }) // parent 自动衔接上一个重放提交
+    replayed++
+  }
+
+  // 同步工作区与暂存区
+  state.workdir = { ...newTree }
+  state.staged = {}
+  pushReflog(`rebase ${target}: Successfully rebased and updated refs/heads/${state.head}.`)
+  return {
+    type: 'output',
+    lines: [
+      `Successfully rebased and updated refs/heads/${state.head}.`,
+      `✅ 变基完成：${replayed} 个提交已重放到 ${target} 之上，历史变为线性。`,
+      '提示：git log --oneline 查看线性提交历史。'
+    ]
+  }
+}
+
+/**
+ * git clean：清理未跟踪文件（数据驱动）
+ *   git clean -n   预览将要删除的文件
+ *   git clean -f   强制删除未跟踪文件（-fd / -ffd / -fx 同理）
+ */
+function gitClean(args) {
+  const req = requireInit()
+  if (req) return req
+  const dry = args.includes('-n')
+  const force = args.some((a) => /^-f/.test(a))
+  if (!dry && !force) {
+    return {
+      type: 'error',
+      lines: [
+        'fatal: clean.requireForce is true and -f was not given: refusing to clean',
+        '提示：先用 git clean -n 预览，再执行 git clean -f 删除未跟踪文件。'
+      ]
+    }
+  }
+  const tree = headTree()
+  const untracked = Object.keys(state.workdir).filter(
+    (p) => !Object.prototype.hasOwnProperty.call(tree, p) && !Object.prototype.hasOwnProperty.call(state.staged, p)
+  )
+  if (!untracked.length) return { type: 'output', lines: ['Nothing to clean.'] }
+  const lines = untracked.map((p) => (dry ? `Would remove ${p}` : `Removing ${p}`))
+  if (!dry) {
+    for (const p of untracked) delete state.workdir[p]
+    lines.push(`✅ 已清理 ${untracked.length} 个未跟踪文件。`)
+  } else {
+    lines.push(`提示：共 ${untracked.length} 个未跟踪文件，确认后执行 git clean -f 删除。`)
+  }
+  return { type: 'output', lines }
 }
 
 function gitReflog() {
@@ -1162,10 +1590,11 @@ function gitHelp() {
       '  git status / git add <file> / git commit -m "说明"   基本提交流程',
       '  git log [--oneline] / git diff [--staged]   查看历史与差异',
       '  git branch / git checkout [-b] <分支> / git switch [-c] <分支>   分支管理',
-      '  git merge <分支> / git tag <名称>   合并与标签',
-      '  git remote add origin <url> / git push / git pull   远程仓库',
+      '  git merge <分支> / git rebase <分支> / git tag <名称>   合并、变基与标签',
+      '  git remote add origin <url> / git fetch / git push / git pull   远程仓库',
       '  git stash / git stash list / git stash pop   暂存修改',
-      '  git reset [--hard] <commit> / git revert <commit>   撤销操作',
+      '  git reset [--hard] <commit> / git restore [--staged] <file> / git revert <commit>   撤销与恢复',
+      '  git clean [-n|-f]   清理未跟踪文件',
       '  git cherry-pick <commit> / git reflog   进阶技巧',
       '  git rm <file> / git mv <旧> <新> / git show <commit>   文件操作',
       '',

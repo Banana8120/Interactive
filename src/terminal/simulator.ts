@@ -2,6 +2,9 @@
  * Docker 命令模拟引擎
  * 在浏览器中模拟一个 Docker 环境：维护镜像/容器/卷/网络的状态，
  * 解析用户输入的命令并返回符合真实 Docker CLI 输出的模拟结果。
+ *
+ * 设计原则：所有命令输出均基于当前环境状态 + 数据源（Dockerfile / docker-compose.yml /
+ * 镜像文件系统）实时推断，不使用固定写死的结果字符串。
  */
 
 const VERSION = 'Docker version 26.1.3, build b72abbb'
@@ -37,25 +40,98 @@ const REMOTE_IMAGES = {
   'traefik:v3.0': { size: '135MB' },
   'nginx:1.27-alpine': { size: '44MB' },
   'node:16-alpine': { size: '111MB' },
-  'hello-world': { size: '13.3kB' }
+  'hello-world': { size: '13.3kB' },
+  // 与 IMAGE_DB / docker search 保持一致，使 docker pull <repo> 无 tag 时也能命中
+  'mysql:8.0': { size: '577MB' },
+  'nginx:latest': { size: '187MB' },
+  'redis:7-alpine': { size: '42MB' },
+  'node:20-alpine': { size: '128MB' },
+  'ubuntu:latest': { size: '78MB' }
 }
 
 // 课程内置的“基准镜像库”快照：rmi 会从 IMAGE_DB 删除镜像，
 // 但教程的镜像属于课程资源，进入每个课时时应恢复，避免上一课时删除的镜像污染后续课时。
 const BASE_IMAGES = JSON.parse(JSON.stringify(IMAGE_DB))
 
-const REMOTE_LAYERS = ['digest: sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'status: Downloaded newer image for ']
+// ---------------------------------------------------------------------------
+// 镜像内模拟文件系统：repo -> { 绝对路径: 内容 }
+// 供 docker run / exec / logs 等命令按容器实际镜像实时推断输出
+// ---------------------------------------------------------------------------
 
-// 随机生成若干 "层: Pull complete" 行，模拟真实拉取输出
-function randomLayers(count = 3) {
-  return Array.from({ length: count }, () => ` ${randomId(12)}: Pull complete `)
+const PROJECT_FILES = {
+  '/app/app.js': "const http = require('http');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'text/plain' });\n  res.end('Hello from Docker!\\n');\n});\n\nserver.listen(3000, () => {\n  console.log('Server running at http://localhost:3000');\n});\n",
+  '/app/package.json': '{\n  "name": "docker-project",\n  "version": "1.0.0",\n  "main": "app.js"\n}\n',
+  '/Dockerfile': [
+    '# 使用官方 Node.js 镜像作为基础镜像',
+    'FROM node:20-alpine',
+    '',
+    '# 设置工作目录',
+    'WORKDIR /app',
+    '',
+    '# 复制依赖清单并安装依赖',
+    'COPY package*.json ./',
+    'RUN npm install',
+    '',
+    '# 复制项目代码',
+    'COPY . .',
+    '',
+    '# 暴露端口',
+    'EXPOSE 3000',
+    '',
+    '# 启动命令',
+    'CMD ["node", "app.js"]'
+  ].join('\n') + '\n',
+  '/app/README.md': '# docker-project\n\nNode.js demo app for Docker learning.\n'
 }
+
+const IMAGE_FS = {
+  nginx: {
+    '/etc/nginx/nginx.conf': 'user  nginx;\nworker_processes  auto;\nerror_log  /var/log/nginx/error.log notice;\npid        /var/run/nginx.pid;\n\nevents {\n    worker_connections  1024;\n}\n\nhttp {\n    include       /etc/nginx/mime.types;\n    default_type  application/octet-stream;\n    sendfile        on;\n    server {\n        listen       80;\n        server_name  localhost;\n        location / {\n            root   /usr/share/nginx/html;\n            index  index.html index.htm;\n        }\n    }\n}\n',
+    '/etc/nginx/conf.d/default.conf': 'server {\n    listen       80;\n    server_name  localhost;\n\n    location / {\n        root   /usr/share/nginx/html;\n        index  index.html index.htm;\n    }\n}\n',
+    '/usr/share/nginx/html/index.html': '<!DOCTYPE html>\n<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n<body>\n<h1>Welcome to nginx!</h1>\n<p>If you see this page, the nginx web server is successfully installed.</p>\n</body>\n</html>\n',
+    '/docker-entrypoint.sh': '#!/bin/sh\n# vim:sw=4:ts=4:et\nset -e\n\nexec "$@"\n'
+  },
+  redis: {
+    '/etc/redis/redis.conf': 'bind 127.0.0.1 0.0.0.0\nport 6379\ntimeout 0\ndatabases 16\nappendonly yes\n',
+    '/data/appendonly.aof': '',
+    '/usr/local/bin/redis-server': ''
+  },
+  mysql: {
+    '/etc/mysql/my.cnf': '[mysqld]\nport=3306\ndatadir=/var/lib/mysql\ncharacter-set-server=utf8mb4\ncollation-server=utf8mb4_unicode_ci\n',
+    '/var/lib/mysql/.keep': ''
+  },
+  node: { ...PROJECT_FILES },
+  ubuntu: {
+    '/etc/os-release': 'PRETTY_NAME="Ubuntu 22.04.3 LTS"\nNAME="Ubuntu"\nVERSION_ID="22.04"\nVERSION_CODENAME=jammy\n',
+    '/root/.bashrc': '# ~/.bashrc: executed by bash(1) for non-login shells.\nexport PS1="\\h:\\w\\$ "\n'
+  },
+  alpine: {
+    '/etc/os-release': 'NAME="Alpine Linux"\nVERSION_ID=3.19.1\nPRETTY_NAME="Alpine Linux v3.19"\n',
+    '/root/.profile': '# ~/.profile\n'
+  }
+}
+
+// 模拟项目目录（宿主机视角）：供 ls / cat / bind mount 使用
+const HOST_PROJECT_FILES = {
+  Dockerfile: PROJECT_FILES['/Dockerfile'],
+  'app.js': PROJECT_FILES['/app/app.js'],
+  'package.json': PROJECT_FILES['/app/package.json'],
+  'README.md': PROJECT_FILES['/app/README.md']
+}
+
+// ---------------------------------------------------------------------------
+// 随机工具
+// ---------------------------------------------------------------------------
 
 function randomId(len = 12) {
   const chars = '0123456789abcdef'
   let s = ''
   for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * 16)]
   return s
+}
+
+function randomLayers(count = 3) {
+  return Array.from({ length: count }, () => ` ${randomId(12)}: Pull complete `)
 }
 
 const COUNTER = { container: 1, image: 1 }
@@ -183,6 +259,256 @@ export function clearDockerState(lessonId) {
 }
 
 // ---------------------------------------------------------------------------
+// 时间/状态工具（实时推断）
+// ---------------------------------------------------------------------------
+
+function timeAgo(ts) {
+  if (!ts) return 'just now'
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000))
+  if (s < 60) return `${s} second${s === 1 ? '' : 's'} ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} minute${m === 1 ? '' : 's'} ago`
+  const h = Math.floor(m / 60)
+  return `${h} hour${h === 1 ? '' : 's'} ago`
+}
+
+function upTime(ts) {
+  if (!ts) return 'Up Less than a second'
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000))
+  if (s < 60) return `Up ${s} second${s === 1 ? '' : 's'}`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `Up ${m} minute${m === 1 ? '' : 's'}`
+  return `Up About ${Math.floor(m / 60)} hour${Math.floor(m / 60) === 1 ? '' : 's'}`
+}
+
+function containerStatusText(c) {
+  if (c.status === 'running') return upTime(c.createdAt || START_TIME)
+  if (c.status === 'exited') return `Exited (0) ${timeAgo(c.exitedAt || c.createdAt || START_TIME)}`
+  return 'Created'
+}
+
+// 按容器/镜像推断其“典型工作目录”
+function workdirOf(c) {
+  const repo = (c.image || '').split(':')[0]
+  const wd = {
+    nginx: '/etc/nginx',
+    redis: '/data',
+    mysql: '/var/lib/mysql',
+    node: '/app',
+    ubuntu: '/root',
+    alpine: '/root'
+  }
+  return wd[repo] || '/'
+}
+
+// 按镜像类型推断模拟 IP 段
+function containerIP(c) {
+  const idx = Math.max(0, NETWORKS.findIndex((n) => n.name === (c.network || 'bridge')))
+  const n = CONTAINERS.findIndex((x) => x.id === c.id)
+  return `172.${18 + idx}.0.${100 + n + 1}`
+}
+
+// ---------------------------------------------------------------------------
+// 文件系统查询（容器内视角）
+// ---------------------------------------------------------------------------
+
+function normalizePath(p) {
+  if (!p) return '/'
+  if (!p.startsWith('/')) p = '/' + p
+  return p.replace(/\/+$/, '') || '/'
+}
+
+function mergedFs(c) {
+  const repo = (c.image || '').split(':')[0]
+  const base = IMAGE_FS[repo] || {}
+  // 绑定挂载 /app 或 node 镜像：宿主项目文件可视为容器内 /app 内容
+  if (repo === 'node' || (c.volume && c.volume.includes('/app'))) {
+    for (const [k, v] of Object.entries(PROJECT_FILES)) base[k] = v
+  }
+  return { ...base, ...(c.fs || {}) }
+}
+
+// 列出容器内某目录；目录不存在返回 null
+function listContainerDir(c, path) {
+  const fs = mergedFs(c)
+  const dir = normalizePath(path)
+  const prefix = dir === '/' ? '/' : dir + '/'
+  const names = new Set()
+  for (const p of Object.keys(fs)) {
+    if (p === dir || p === prefix) continue
+    if (p.startsWith(prefix)) {
+      const rest = p.slice(prefix.length)
+      if (rest && !rest.includes('/')) names.add(rest)
+    }
+  }
+  if (!names.size) return null
+  return Array.from(names).sort()
+}
+
+// 读取容器内文件；不存在返回 null
+function catContainerFile(c, path) {
+  const fs = mergedFs(c)
+  const norm = normalizePath(path)
+  if (Object.prototype.hasOwnProperty.call(fs, norm)) return fs[norm]
+  return null
+}
+
+// 推断 node 脚本输出（解析 console.log 与 listen 端口）
+function inferNodeOutput(content) {
+  const logs = []
+  const re = /console\.log\(([^)]*)\)/g
+  let m
+  while ((m = re.exec(content))) {
+    let v = m[1].trim()
+    v = v.replace(/^["'`]|["'`]$/g, '')
+    if (v) logs.push(v)
+  }
+  const listen = content.match(/\.listen\((\d+)/)
+  return { logs, port: listen ? Number(listen[1]) : null }
+}
+
+// ---------------------------------------------------------------------------
+// 容器日志生成（基于镜像 / 命令 / 端口实时推断）
+// ---------------------------------------------------------------------------
+
+/** 推断容器运行的基础镜像类型：优先看镜像名，其次回溯 Dockerfile 的 FROM（compose/build 产出的镜像） */
+function baseRepoOf(c) {
+  const repo = (c.image || '').split(':')[0]
+  if (['nginx', 'redis', 'mysql', 'node'].includes(repo)) return repo
+  const img = c.imageKey && IMAGE_DB[c.imageKey]
+  const from = img && img.from ? String(img.from).toLowerCase() : ''
+  if (from.includes('node')) return 'node'
+  if (from.includes('nginx')) return 'nginx'
+  if (from.includes('redis')) return 'redis'
+  if (from.includes('mysql')) return 'mysql'
+  return repo
+}
+
+function buildContainerLogs(c) {
+  const repo = baseRepoOf(c)
+  const nowT = now()
+  const host = c.ports ? c.ports.split(':')[0] : null
+  const containerPort = c.ports ? c.ports.split(':')[1] : (c.exposes && c.exposes[0]) || null
+  const ip = containerIP(c)
+
+  if (repo === 'nginx') {
+    return [
+      '/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration',
+      '/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/',
+      '/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh',
+      '10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf',
+      '/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh',
+      '/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh',
+      'ready for start up',
+      '',
+      `${ip} - - [${nowT}] "GET / HTTP/1.1" 200 615 "-" "Mozilla/5.0"`,
+      host ? `${ip} - - [${nowT}] "GET /favicon.ico HTTP/1.1" 404 153 "-" "curl/8.5.0"` : ''
+    ].filter(Boolean)
+  }
+  if (repo === 'redis') {
+    return [
+      `1:C ${nowT}.123 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo`,
+      `1:C ${nowT}.124 * Redis version=7.2.4, bits=64, commit=00000000`,
+      `1:C ${nowT}.125 * monotonic clock: POSIX clock_gettime`,
+      `1:M ${nowT}.200 * Running mode=standalone, port=6379.`,
+      `1:M ${nowT}.201 * Server initialized`,
+      `1:M ${nowT}.202 * Ready to accept connections tcp`
+    ]
+  }
+  if (repo === 'mysql') {
+    return [
+      `${nowT.replace(' ', 'T')}.123Z 0 [System] [MY-010116] [Server] /usr/sbin/mysqld (mysqld 8.0.36) starting as process 1`,
+      `${nowT.replace(' ', 'T')}.456Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.36'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  (MySQL Community Server - GPL).`
+    ]
+  }
+  if (repo === 'node') {
+    const content = catContainerFile(c, '/app/app.js') || ''
+    const { logs, port } = inferNodeOutput(content)
+    const base = logs.length ? logs : ['Server running at http://0.0.0.0:' + (port || containerPort || 3000)]
+    if (containerPort || port) base.push(`Listening on port ${port || containerPort}`)
+    return base
+  }
+  return [`容器 ${c.shortId} 已启动（${c.image}），当前没有更多日志输出。`]
+}
+
+// ---------------------------------------------------------------------------
+// Dockerfile 解析（docker build / compose build 使用）
+// ---------------------------------------------------------------------------
+
+function parseCmdStr(rest) {
+  // CMD ["node", "app.js"] 或 CMD node app.js
+  const m = rest.match(/\[(.*)\]/)
+  if (m) {
+    const parts = []
+    const re = /"((?:[^"\\]|\\.)*)"/g
+    let mm
+    while ((mm = re.exec(m[1]))) parts.push(mm[1])
+    return parts.length ? parts.join(' ') : rest.replace(/["',]/g, '').trim()
+  }
+  return rest.replace(/["']/g, '').trim()
+}
+
+function parseDockerfile(lines) {
+  const cfg = { from: null, workdir: null, copies: [], runs: [], exposes: [], cmd: null, entrypoint: null }
+  for (const raw of lines) {
+    const line = String(raw).replace(/#.*$/, '').trim()
+    if (!line) continue
+    const sp = line.indexOf(' ')
+    const instr = (sp === -1 ? line : line.slice(0, sp)).toUpperCase()
+    const rest = sp === -1 ? '' : line.slice(sp + 1).trim()
+    switch (instr) {
+      case 'FROM': cfg.from = rest.split(/\s+AS\s+/i)[0].trim(); break
+      case 'WORKDIR': cfg.workdir = rest.replace(/["']/g, ''); break
+      case 'COPY': cfg.copies.push(rest); break
+      case 'ADD': cfg.copies.push(rest); break
+      case 'RUN': cfg.runs.push(rest); break
+      case 'EXPOSE': cfg.exposes.push(rest.split(/\s+/)[0].replace(/["']/g, '')); break
+      case 'CMD': cfg.cmd = parseCmdStr(rest); break
+      case 'ENTRYPOINT': cfg.entrypoint = parseCmdStr(rest); break
+    }
+  }
+  return cfg
+}
+
+function dockerfileText() {
+  return HOST_PROJECT_FILES['Dockerfile'] || ''
+}
+
+// 估算构建出的镜像体积（基础镜像 + 每层 RUN/COPY 增加量）
+function estimateImageSize(fromRepo, cfg) {
+  const base = fromRepo ? (IMAGE_DB[ensureImage(fromRepo)] || IMAGE_DB[fromRepo] || {}).size : '0B'
+  const n = cfg.runs.length + cfg.copies.length + 1
+  const extraMb = n * 12
+  const baseNum = parseInt(base) || 100
+  const mb = baseNum + extraMb
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)}GB` : `${mb}MB`
+}
+
+// 将 Dockerfile 解析结果构造成镜像并注册到 IMAGE_DB，返回镜像引用
+function buildFromDockerfile(name) {
+  const cfg = parseDockerfile(dockerfileText().split('\n'))
+  const repo = name.includes(':') ? name.split(':')[0] : name
+  const tag = name.includes(':') ? name.split(':')[1] : 'latest'
+  if (!cfg.from) {
+    IMAGE_DB[`${repo}:${tag}`] = { repo, tag, id: 'sha256:' + randomId(12), size: '24MB', created: 'just now', status: '本地构建' }
+    return `${repo}:${tag}`
+  }
+  const cmd = cfg.entrypoint ? `${cfg.entrypoint}${cfg.cmd ? ' ' + cfg.cmd : ''}` : cfg.cmd
+  IMAGE_DB[`${repo}:${tag}`] = {
+    repo, tag,
+    id: 'sha256:' + randomId(12),
+    size: estimateImageSize(cfg.from, cfg),
+    created: 'just now',
+    status: '本地构建',
+    cmd: cmd || '',
+    exposes: cfg.exposes,
+    workdir: cfg.workdir,
+    from: cfg.from
+  }
+  return `${repo}:${tag}`
+}
+
+// ---------------------------------------------------------------------------
 // 命令解析与执行
 // ---------------------------------------------------------------------------
 
@@ -219,7 +545,7 @@ export function executeCommand(rawInput) {
   // 非 docker 命令
   const builtins = {
     help: runHelp,
-    ls: () => ({ lines: ['.', '..', 'Dockerfile', 'app.js', 'package.json'] }),
+    ls: () => ({ lines: ['.', '..', 'docker-compose.yml', ...Object.keys(HOST_PROJECT_FILES)] }),
     pwd: () => ({ lines: ['/home/learner/docker-project'] }),
     cat: (args) => runCat(args),
     clear: () => ({ type: 'clear' }),
@@ -352,7 +678,7 @@ function dockerInfo() {
     `  Running:     ${CONTAINERS.filter(c => c.status === 'running').length}`,
     `  Paused:      0`,
     `  Stopped:     ${CONTAINERS.filter(c => c.status === 'exited').length}`,
-    ` Images:       ${Object.keys(IMAGE_DB).length + COUNTER.image - 1}`,
+    ` Images:       ${Object.keys(IMAGE_DB).length}`,
     ' Server Version: 26.1.3',
     ' Storage Driver: overlay2',
     ' Logging Driver: json-file',
@@ -383,12 +709,12 @@ function dockerImages(args) {
 }
 
 function renderImages(list) {
-  const header = 'REPOSITORY    TAG       IMAGE ID       CREATED         SIZE'
+  const header = 'REPOSITORY    TAG       IMAGE ID         CREATED       SIZE'
   const rows = list.map(i => {
     const repo = i.repo.padEnd(12, ' ')
     const tag = (i.tag || 'latest').padEnd(8, ' ')
     const id = i.id.slice(7, 19)
-    const created = (i.created || '').padEnd(14, ' ')
+    const created = (i.created || '').padEnd(13, ' ')
     return ` ${repo} ${tag} ${id}   ${created} ${i.size}`
   })
   return { lines: [header, ...rows] }
@@ -424,23 +750,44 @@ function dockerSearch(args) {
 }
 
 // --- docker pull ---
+/** 在本地镜像库中解析引用：精确匹配 → ref:latest → 同仓库名回退 */
+function findLocalImage(ref) {
+  if (IMAGE_DB[ref]) return IMAGE_DB[ref]
+  if (IMAGE_DB[`${ref}:latest`]) return IMAGE_DB[`${ref}:latest`]
+  const repo = ref.split(':')[0]
+  const match = Object.keys(IMAGE_DB).find((k) => k.split(':')[0] === repo)
+  if (match) return IMAGE_DB[match]
+  return null
+}
+
+/** 在远程镜像仓库中解析引用：精确匹配 → ref:latest → 按仓库名回退；
+ *  返回 { ref: 带 tag 的完整引用, size }，保证无 tag 输入也能命中同仓库已有 tag */
+function resolveRemoteImage(ref) {
+  if (REMOTE_IMAGES[ref]) return { ref, size: REMOTE_IMAGES[ref].size }
+  if (REMOTE_IMAGES[`${ref}:latest`]) return { ref: `${ref}:latest`, size: REMOTE_IMAGES[`${ref}:latest`].size }
+  const repo = ref.split(':')[0]
+  const match = Object.keys(REMOTE_IMAGES).find((k) => k.split(':')[0] === repo)
+  if (match) return { ref: match, size: REMOTE_IMAGES[match].size }
+  return null
+}
+
 function dockerPull(args) {
   const ref = args.find(a => !a.startsWith('-'))
   if (!ref) return { type: 'error', lines: ['"docker pull" requires exactly 1 argument.', "See 'docker pull --help'."] }
 
-  // 模拟拉取动画由前端处理（progress 提示）
-  const img = IMAGE_DB[ref] || IMAGE_DB[`${ref}:latest`]
+  const img = findLocalImage(ref)
   if (img) {
+    const tag = (img.tag || 'latest')
     return { lines: [
-      `Using default tag: latest`,
-      `latest: Pulling from library/${img.repo}`,
+      `Using default tag: ${tag}`,
+      `${tag}: Pulling from library/${img.repo}`,
       ...randomLayers(),
-      `Status: Image is up to date for ${img.repo}:latest`,
-      `docker.io/library/${ref}: what you pulled is already in local. 提示：镜像已存在，无需重复拉取。`
+      `Status: Image is up to date for ${img.repo}:${tag}`,
+      `docker.io/library/${img.repo}:${tag}`
     ], delay: 800 }
   }
 
-  const remote = REMOTE_IMAGES[ref] || REMOTE_IMAGES[`${ref}:latest`]
+  const remote = resolveRemoteImage(ref)
   if (!remote) {
     return {
       type: 'error',
@@ -453,9 +800,9 @@ function dockerPull(args) {
     }
   }
 
-  // 拉取成功后加入本地镜像库
-  const repo = ref.split(':')[0]
-  const tag = ref.includes(':') ? ref.split(':')[1] : 'latest'
+  // 拉取成功后加入本地镜像库（无 tag 输入时使用远程匹配到的 tag，避免生成重复的 :latest）
+  const repo = remote.ref.split(':')[0]
+  const tag = remote.ref.includes(':') ? remote.ref.split(':')[1] : 'latest'
   IMAGE_DB[`${repo}:${tag}`] = { repo, tag, id: 'sha256:' + randomId(12), size: remote.size, created: 'just now', status: '已下载' }
 
   return {
@@ -498,6 +845,19 @@ function dockerTag(args) {
   return { lines: [`镜像 ${key} 已标记为 ${dest}（tag 只是引用，不会复制镜像数据）`] }
 }
 
+// --- 端口映射解析 ---
+function resolvePortMap(flag, exposes) {
+  if (!flag) return null
+  const parts = flag.split(':')
+  if (parts.length >= 2) {
+    return { host: parts[0], container: parts[1], text: `${parts[0]}:${parts[1]}` }
+  }
+  // 只写了容器端口（-p 3000）或 -P：宿主端口随机分配
+  const host = String(++PORTS_COUNTER)
+  const container = parts[0]
+  return { host, container, text: `${host}:${container}` }
+}
+
 // --- docker run ---
 function dockerRun(args) {
   const flags = { detach: false, name: null, portMap: null, publishAll: false, volume: null, env: [], rm: false, interactive: false, network: null }
@@ -528,14 +888,14 @@ function dockerRun(args) {
   const imageRef = positional[0]
   if (!imageRef) return { type: 'error', lines: ['"docker run" requires at least 1 argument.', "See 'docker run --help'."] }
   let key = ensureImage(imageRef)
-  // 与真实 Docker 一致：本地没有时自动 pull（仅限仓库中存在的镜像）
-  if (!key && (REMOTE_IMAGES[imageRef] || REMOTE_IMAGES[`${imageRef}:latest`])) {
+  // 与真实 Docker 一致：本地没有时自动 pull（仅限仓库中存在的镜像，tag 可任意）
+  if (!key && resolveRemoteImage(imageRef)) {
     const repo = imageRef.split(':')[0]
     const tag = imageRef.includes(':') ? imageRef.split(':')[1] : 'latest'
     IMAGE_DB[`${repo}:${tag}`] = {
       repo, tag,
       id: 'sha256:' + randomId(12),
-      size: (REMOTE_IMAGES[imageRef] || REMOTE_IMAGES[`${imageRef}:latest`]).size,
+      size: resolveRemoteImage(imageRef).size,
       created: 'just now',
       status: '已下载'
     }
@@ -552,47 +912,63 @@ function dockerRun(args) {
     }
   }
 
+  const image = IMAGE_DB[key]
+  const exposes = image.exposes || []
+  const imgCmd = image.cmd || ''
+  // -P：映射镜像 EXPOSE 声明端口；无声明时退化为 80
   if (flags.publishAll && !flags.portMap) {
-    flags.portMap = `${++PORTS_COUNTER}:80`
+    const cp = (exposes && exposes[0]) || '80'
+    flags.portMap = `${++PORTS_COUNTER}:${cp}`
   }
+  const portMap = resolvePortMap(flags.portMap, exposes)
 
   const cmd = positional.slice(1).join(' ') || ''
-  const image = IMAGE_DB[key]
   const id = genContainerId()
   const isHello = key.startsWith('hello-world')
+  const repo = image.repo
 
   // 端口冲突检测：运行中的容器已占用宿主端口时报错（与真实 Docker 一致）
-  if (flags.portMap) {
-    const hostPort = flags.portMap.split(':')[0]
+  if (portMap) {
     const conflict = CONTAINERS.some(
-      (c) => c.status === 'running' && c.ports && c.ports.split(':')[0] === hostPort
+      (c) => c.status === 'running' && c.ports && c.ports.split(':')[0] === portMap.host
     )
     if (conflict) {
       return {
         type: 'error',
         lines: [
-          `docker: Error response from daemon: driver failed programming external connectivity on endpoint: Bind for 0.0.0.0:${hostPort} failed: port is already allocated`,
-          `提示：宿主机 ${hostPort} 端口已被其他运行中的容器占用。换一个端口，或先停止/删除占用该端口的容器。`
+          `docker: Error response from daemon: driver failed programming external connectivity on endpoint: Bind for 0.0.0.0:${portMap.host} failed: port is already allocated`,
+          `提示：宿主机 ${portMap.host} 端口已被其他运行中的容器占用。换一个端口，或先停止/删除占用该端口的容器。`
         ]
       }
     }
   }
+
+  // 判断前台命令是否会“长驻”（server 类）还是“立即退出”
+  // 无命令时按镜像默认：node 官方镜像若容器内有 /app/app.js，视为待启动的 Node 服务
+  const nodeApp = repo === 'node' && !cmd && !imgCmd && !!PROJECT_FILES['/app/app.js']
+  const longRunning = ['node', 'npm', 'nginx', 'redis-server', 'mysqld', 'python', 'java', 'gunicorn', 'uwsgi', 'serve'].some(k => cmd.includes(k) || imgCmd.includes(k)) || nodeApp
+  const shortCmd = cmd && !longRunning
 
   const container = {
     id,
     shortId: id.slice(0, 12),
     image: image.repo + ':' + (image.tag || 'latest'),
     imageKey: key,
-    command: cmd || (isHello ? '/hello' : image.repo === 'ubuntu' || image.repo === 'alpine' ? '/bin/bash' : image.repo === 'nginx' ? '/docker-entrypoint.sh nginx -g "daemon off;"' : ''),
+    command: cmd || imgCmd || (isHello ? '/hello' : (repo === 'ubuntu' || repo === 'alpine' ? '/bin/bash' : '')),
     created: now(),
-    status: isHello ? 'exited' : (flags.detach || !cmd ? 'running' : 'exited'),
-    name: flags.name || (image.repo + '_' + randomId(4) + '_' + COUNTER.container),
-    ports: flags.portMap || null,
+    createdAt: Date.now(),
+    status: isHello ? 'exited' : (flags.detach || (longRunning && !cmd) || flags.interactive ? 'running' : (shortCmd ? 'exited' : 'running')),
+    exitedAt: null,
+    name: flags.name || (repo + '_' + randomId(4) + '_' + COUNTER.container),
+    ports: portMap ? portMap.text : null,
     volume: flags.volume || null,
     env: flags.env,
     rm: flags.rm,
-    network: flags.network && NETWORKS.some(n => n.name === flags.network) ? flags.network : null
+    network: flags.network && NETWORKS.some(n => n.name === flags.network) ? flags.network : null,
+    exposes,
+    fs: {}
   }
+  if (container.status === 'exited') container.exitedAt = Date.now()
 
   if (flags.volume && !flags.volume.includes(':')) {
     // 匿名卷
@@ -605,19 +981,9 @@ function dockerRun(args) {
     }
   }
 
-  if (flags.portMap) {
-    const hostPort = flags.portMap.split(':')[0]
-    container.ports = `${hostPort}:${flags.portMap.split(':')[1]}`
-  }
-
+  container.logs = buildContainerLogs(container)
   COUNTER.container++
   CONTAINERS.unshift(container)
-
-  // 端口计算
-  let hostPort = null
-  if (flags.portMap) {
-    hostPort = flags.portMap.split(':')[0]
-  }
 
   if (isHello) {
     if (container.rm) {
@@ -649,17 +1015,16 @@ function dockerRun(args) {
 
   if (flags.detach) {
     return {
-      lines: [hostPort ? `${hostPort}->80/tcp, :::${hostPort}->80/tcp` : '', container.shortId],
+      lines: [portMap ? `${portMap.container}/tcp -> 0.0.0.0:${portMap.host}` : '', container.shortId],
       delay: 500
     }
   }
 
-  if (cmd) {
-    // 前台执行用户给的命令
-    return { lines: runContainerCommand(image.repo, cmd), delay: 400 }
+  if (cmd && shortCmd) {
+    // 前台执行短命令：按容器文件系统智能推断结果
+    return { lines: runContainerCommand(container, cmd), delay: 400 }
   }
 
-  // 交互式容器
   if (flags.interactive) {
     return {
       lines: [
@@ -672,20 +1037,69 @@ function dockerRun(args) {
     }
   }
 
+  if (longRunning) {
+    // 长驻服务容器：输出启动日志
+    return { lines: container.logs.slice(0, 3), delay: 500 }
+  }
+
   return { lines: [container.shortId], delay: 500 }
 }
 
-function runContainerCommand(repo, cmd) {
-  const c = cmd.split(' ')
-  if (c[0] === 'echo') return [c.slice(1).join(' ')]
-  if (c[0] === 'cat') return ['# ' + c[1] + ' 文件内容（模拟）', '']
-  if (c[0] === 'ls') return ['Dockerfile  app.js  package.json  README.md']
-  if (c[0] === 'env') return ['PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'HOSTNAME=abc123', 'HOME=/root']
-  if (c[0] === 'node' && c[1] && c[1].includes('.')) return ['Hello from Node.js in Docker!']
-  return [`运行结果（模拟）：${cmd}`, '（真实环境中输出取决于容器内程序）']
+// docker run 前台命令的智能推断（基于容器文件系统）
+function runContainerCommand(c, cmdStr) {
+  const cArr = cmdStr.split(/\s+/)
+  const head = cArr[0]
+  const argsRest = cArr.slice(1)
+  const repo = (c.image || '').split(':')[0]
+
+  if (head === 'echo') return [argsRest.join(' ').replace(/"/g, '')]
+  if (head === 'cat') {
+    const content = catContainerFile(c, argsRest[0] || '')
+    if (content !== null) return content.replace(/\n$/, '').split('\n')
+    return [`cat: ${argsRest[0]}: No such file or directory`]
+  }
+  if (head === 'ls') {
+    const dir = listContainerDir(c, argsRest[argsRest.length - 1] || workdirOf(c))
+    if (dir) return [dir.join('  ')]
+    return [`ls: cannot access '${argsRest[argsRest.length - 1]}': No such file or directory`]
+  }
+  if (head === 'env') {
+    return [
+      'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      `HOSTNAME=${c.shortId}`,
+      'HOME=/root',
+      ...(c.env || [])
+    ]
+  }
+  if (head === 'node') {
+    const file = argsRest.find(a => a.includes('.'))
+    const content = file ? catContainerFile(c, file) || catContainerFile(c, '/app/' + file) : null
+    if (content !== null) {
+      const { logs } = inferNodeOutput(content)
+      return logs.length ? logs : [`${file} 执行完成（退出码 0）`]
+    }
+    return ['Welcome to Node.js v20.11.0.', 'Type ".help" for more information.']
+  }
+  if (head === 'uname') return ['Linux']
+  if (head === 'whoami') return ['root']
+  if (head === 'pwd') return [workdirOf(c)]
+  return [
+    `运行结果（模拟）：${cmdStr}`,
+    repo === 'ubuntu' || repo === 'alpine'
+      ? `（容器内 ${repo} 环境已执行命令 ${cmdStr}，退出码 0）`
+      : '（真实环境中输出取决于容器内程序）'
+  ]
 }
 
 // --- docker ps ---
+function psPortsText(c) {
+  // 将容器端口映射格式化为真实 docker ps 样式：0.0.0.0:8080->80/tcp
+  if (!c.ports) return ''
+  const parts = String(c.ports).split(':')
+  if (parts.length === 2) return `0.0.0.0:${parts[0]}->${parts[1]}/tcp `
+  return `${c.ports} `
+}
+
 function dockerPs(args) {
   const all = args.includes('-a') || args.includes('--all')
   const list = all ? CONTAINERS : CONTAINERS.filter(c => c.status === 'running')
@@ -697,11 +1111,11 @@ function dockerPs(args) {
     const id = c.shortId
     const img = (c.image || '').padEnd(13, ' ')
     const cmdStr = (c.command || '').slice(0, 20).padEnd(21, ' ')
-    const created = '3 seconds ago'
-    const status = c.status === 'running' ? `Up ${Math.floor((Date.now() - START_TIME) / 1000) % 60 || 2} seconds` : 'Exited (0) 2 seconds ago'
-    const ports = c.ports ? `${c.ports} ` : ''
+    const created = timeAgo(c.createdAt)
+    const status = containerStatusText(c).padEnd(20, ' ')
+    const ports = psPortsText(c)
     const name = c.name
-    return ` ${id}   ${img} ${cmdStr} ${created}  ${status.padEnd(20, ' ')} ${ports}${name}`
+    return ` ${id}   ${img} ${cmdStr} ${created}  ${status} ${ports}${name}`
   })
   return { lines: [header, ...rows] }
 }
@@ -714,6 +1128,7 @@ function dockerStart(args) {
   if (!c) return { type: 'error', lines: [`Error response from daemon: No such container: ${target}`] }
   if (c.status === 'running') return { lines: [`容器 ${target} 已在运行中。`] }
   c.status = 'running'
+  c.createdAt = Date.now()
   return { lines: [c.shortId], delay: 300 }
 }
 
@@ -725,6 +1140,7 @@ function dockerStop(args) {
   if (!c) return { type: 'error', lines: [`Error response from daemon: No such container: ${target}`] }
   if (c.status === 'exited') return { lines: [`容器 ${target} 已经处于停止状态。`] }
   c.status = 'exited'
+  c.exitedAt = Date.now()
   return { lines: [c.shortId], delay: 500 }
 }
 
@@ -734,6 +1150,8 @@ function dockerRestart(args) {
   const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
   if (!c) return { type: 'error', lines: [`Error response from daemon: No such container: ${target}`] }
   c.status = 'running'
+  c.createdAt = Date.now()
+  c.exitedAt = null
   return { lines: [c.shortId], delay: 600 }
 }
 
@@ -765,14 +1183,16 @@ function dockerLogs(args) {
   if (!target) return { type: 'error', lines: ['"docker logs" requires exactly 1 argument.'] }
   const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
   if (!c) return { type: 'error', lines: [`Error: No such container: ${target}`] }
-  const sample = {
-    nginx: ['/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration', '/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/', '/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh', '10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf', '/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh', 'ready for start up'],
-    redis: ['1:C 17 Aug 2026 11:30:01.000 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo', '1:C 17 Aug 2026 11:30:01.000 * Redis version=7.2.4, bits=64, commit=00000000', '1:C 17 Aug 2026 11:30:01.000 * monotonic clock: POSIX clock_gettime', '1:M 17 Aug 2026 11:30:01.001 * Running mode=standalone, port=6379.', '1:M 17 Aug 2026 11:30:01.001 * Ready to accept connections tcp'],
-    ubuntu: ['（ubuntu 容器默认无前台进程，可能没有日志输出。可以先用 docker start 启动再查看）'],
-    node: ['Example app listening at http://0.0.0.0:3000'],
-    mysql: ['2026-08-17T11:30:01.123Z 0 [System] [MY-010116] [Server] /usr/sbin/mysqld (mysqld 8.0.36) starting as process 1', '2026-08-17T11:30:01.456Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections.']
+
+  let logs = Array.isArray(c.logs) && c.logs.length ? [...c.logs] : buildContainerLogs(c)
+  if (args.includes('-f') || args.includes('--follow')) {
+    logs.push('（--follow 模式：日志持续输出中，模拟环境仅展示当前内容）')
   }
-  const logs = sample[c.image.split(':')[0]] || [`容器 ${c.shortId} 无日志输出。`]
+  const tailIdx = args.indexOf('--tail')
+  if (tailIdx !== -1) {
+    const n = Math.max(1, Number(args[tailIdx + 1]) || 10)
+    logs = logs.slice(-n)
+  }
   return { lines: logs, delay: 400 }
 }
 
@@ -787,18 +1207,90 @@ function dockerExec(args) {
   if (c.status !== 'running') return { type: 'error', lines: [`Error response from daemon: Container ${target} is not running`] }
   const cmd = cmdArgs.join(' ')
   if (!cmd) return { type: 'error', lines: ['"docker exec" requires at least 2 arguments.'] }
-  if (cmdArgs[0] === 'ls') return { lines: ['app.js  Dockerfile  package.json  node_modules  public'], delay: 200 }
-  if (cmdArgs[0] === 'echo') {
-    const redirIdx = cmdArgs.indexOf('>')
-    const text = redirIdx > -1 ? cmdArgs.slice(1, redirIdx) : cmdArgs.slice(1)
-    return { lines: [text.join(' ').replace(/"/g, '')], delay: 200 }
+
+  const head = cmdArgs[0]
+  const rest = cmdArgs.slice(1)
+  const repo = (c.image || '').split(':')[0]
+
+  if (head === 'ls') {
+    const path = rest[rest.length - 1] || workdirOf(c)
+    const dir = listContainerDir(c, path)
+    if (dir) return { lines: [dir.join('  ')], delay: 200 }
+    return { type: 'error', lines: [`ls: cannot access '${path}': No such file or directory`], delay: 200 }
   }
-  if (cmdArgs[0] === 'env') return { lines: ['PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'HOSTNAME=' + c.shortId, 'HOME=/root'], delay: 200 }
-  if (cmdArgs[0] === 'cat') return { lines: ['# 容器内 ' + cmdArgs[1] + ' 的内容（模拟）', ''], delay: 200 }
-  if (cmdArgs[0] === 'node') return { lines: ['Hello from Node.js inside container!'], delay: 300 }
-  if (cmdArgs[0] === 'ps' && cmdArgs[1] === 'aux') return { lines: ['PID   USER     TIME  COMMAND', '    1 root      0:00 ' + (c.command || 'nginx'), '   12 root      0:00 ps aux'], delay: 200 }
-  if (cmdArgs[0] === 'sh' || cmdArgs[0] === 'bash') return { lines: ['（已进入容器交互终端，真实环境输入 exit 退出）'], delay: 300 }
-  return { lines: [`exec 执行结果（模拟）：${cmd}`, '（真实环境中将输出命令在容器内的实际结果）'], delay: 300 }
+  if (head === 'cat') {
+    const content = catContainerFile(c, rest[0] || '')
+    if (content !== null) return { lines: content.replace(/\n$/, '').split('\n'), delay: 200 }
+    return { type: 'error', lines: [`cat: ${rest[0]}: No such file or directory`], delay: 200 }
+  }
+  if (head === 'echo') {
+    // 支持重定向写容器内文件（容器可写层）
+    const redirIdx = cmdArgs.indexOf('>')
+    if (redirIdx !== -1) {
+      const file = cmdArgs[redirIdx + 1]
+      const text = cmdArgs.slice(1, redirIdx).join(' ').replace(/"/g, '')
+      if (!c.fs) c.fs = {}
+      c.fs[normalizePath(file)] = text + '\n'
+      return { lines: [], delay: 200 }
+    }
+    const text = rest.join(' ').replace(/"/g, '')
+    return { lines: [text], delay: 200 }
+  }
+  if (head === 'env') {
+    return { lines: [
+      'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      'HOSTNAME=' + c.shortId,
+      'HOME=/root',
+      ...(c.env || [])
+    ], delay: 200 }
+  }
+  if (head === 'node') {
+    const file = rest.find(a => a.includes('.'))
+    const content = file ? catContainerFile(c, file) || catContainerFile(c, '/app/' + file) : null
+    if (content !== null) {
+      const { logs } = inferNodeOutput(content)
+      return { lines: logs.length ? logs : [`${file} 执行完成（退出码 0）`], delay: 300 }
+    }
+    return { lines: ['Welcome to Node.js v20.11.0.', 'Type ".help" for more information.'], delay: 300 }
+  }
+  if (head === 'ping') {
+    const host = rest[0]
+    // 智能推断：同一网络（或 bridge）内是否存在该名字的容器
+    const netName = c.network || 'bridge'
+    const peer = CONTAINERS.find(x => x.id !== c.id && (x.network || 'bridge') === netName && x.name === host)
+    if (!peer) {
+      return { type: 'error', lines: [`ping: ${host}: Name or service not known`], delay: 300 }
+    }
+    const ip = containerIP(peer)
+    const lines = [
+      `PING ${host} (${ip}): 56 data bytes`,
+      ...Array.from({ length: 3 }, () => `64 bytes from ${ip}: seq=${Math.floor(Math.random() * 100)} ttl=64 time=${(Math.random() * 0.4 + 0.02).toFixed(3)} ms`),
+      '',
+      `--- ${host} ping statistics ---`,
+      '3 packets transmitted, 3 packets received, 0% packet loss',
+      `round-trip min/avg/max = ${(Math.random() * 0.1 + 0.02).toFixed(3)}/${(Math.random() * 0.2 + 0.05).toFixed(3)}/${(Math.random() * 0.3 + 0.1).toFixed(3)} ms`
+    ]
+    return { lines, delay: 600 }
+  }
+  if (head === 'ps' && rest[0] === 'aux') {
+    return { lines: ['PID   USER     TIME  COMMAND', '    1 root      0:00 ' + (c.command || 'nginx'), '   12 root      0:00 ps aux'], delay: 200 }
+  }
+  if (head === 'sh' || head === 'bash') {
+    return { lines: ['（已进入容器交互终端，真实环境输入 exit 退出）'], delay: 300 }
+  }
+  if (head === 'uname') return { lines: ['Linux'], delay: 100 }
+  if (head === 'whoami') return { lines: ['root'], delay: 100 }
+  if (head === 'pwd') return { lines: [workdirOf(c)], delay: 100 }
+  if (head === 'npm') {
+    return { lines: ['npm notice Logging in to registry.npmjs.org', 'up to date, audited 42 packages in 1.2s', 'found 0 vulnerabilities'], delay: 300 }
+  }
+  return {
+    lines: [
+      `exec 执行结果（模拟）：${cmd}`,
+      `（在 ${c.image} 容器内执行 ${head}，退出码 0）`
+    ],
+    delay: 300
+  }
 }
 
 // --- docker build ---
@@ -813,36 +1305,63 @@ function dockerBuild(args) {
   const context = args[args.length - 1] && !args[args.length - 1].startsWith('-') ? args[args.length - 1] : '.'
   const name = tag || (context === '.' ? 'docker-project:latest' : context.replace(/\//g, '-') + ':latest')
 
-  const steps = [
-    { from: 'node:20-alpine', run: 'RUN npm install', cmd: 'CMD ["node", "app.js"]' }
-  ]
+  // 从 Dockerfile 内容解析构建步骤（数据驱动）
+  const cfg = parseDockerfile(dockerfileText().split('\n'))
+  const from = cfg.from || 'node:20-alpine'
   const baseId = randomId(12)
 
-  const lines = [
-    `[+] Building 4.2s (9/9) FINISHED`,
-    ` => [internal] load build definition from Dockerfile               0.0s`,
-    ` => => transferring dockerfile: 512B                           0.0s`,
-    ` => [internal] load metadata for docker.io/library/node:20-alpine    0.4s`,
-    ` => [1/4] FROM docker.io/library/node:20-alpine@sha256:${randomId(64)}   0.5s`,
-    ` => [2/4] WORKDIR /app                                              0.1s`,
-    ` => [3/4] COPY package*.json ./                                     0.2s`,
-    ` => [4/4] RUN npm install                                           2.8s`,
-    ` => exporting to image                                              0.2s`,
-    ` => => exporting layers                                             0.1s`,
-    ` => => writing image sha256:${baseId}                    0.0s`,
-    ` => => naming to docker.io/library/${name.replace(/^[a-zA-Z0-9]+:\/\//, '')}                   0.0s`,
-    '',
-    `View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/${randomId(8)}`,
-    '',
-    `镜像构建成功：${name}`,
-    `提示：运行 docker images 可查看新构建的镜像。`
-  ]
-
-  const repo = name.includes(':') ? name.split(':')[0] : name
-  const tagPart = name.includes(':') ? name.split(':')[1] : 'latest'
-  if (!IMAGE_DB[`${repo}:${tagPart}`]) {
-    IMAGE_DB[`${repo}:${tagPart}`] = { repo, tag: tagPart, id: 'sha256:' + baseId, size: '214MB', created: 'just now', status: '本地构建' }
+  const steps = []
+  const add = (txt, dur = 0.1) => steps.push({ txt, dur })
+  // 编号步骤 = FROM + 可选 WORKDIR + COPY/ADD×N + RUN×N + EXPOSE×N + CMD（与真实 BuildKit 一致）
+  const numberedSteps = 1 + (cfg.workdir ? 1 : 0) + cfg.copies.length + cfg.runs.length + cfg.exposes.length + (cfg.cmd ? 1 : 0)
+  add(`[internal] load build definition from Dockerfile`, 0)
+  add(`=> => transferring dockerfile: ${dockerfileText().length}B`, 0)
+  add(`[internal] load metadata for docker.io/library/${from}`, 0.4)
+  add(`[1/${numberedSteps}] FROM docker.io/library/${from}@sha256:${randomId(64)}`, 0.5)
+  let idx = 2
+  if (cfg.workdir) {
+    add(`[${idx}/${numberedSteps}] WORKDIR ${cfg.workdir}`, 0.1)
+    idx++
   }
+  for (const c of cfg.copies) {
+    add(`[${idx}/${numberedSteps}] COPY ${c}`, 0.2)
+    idx++
+  }
+  for (const r of cfg.runs) {
+    add(`[${idx}/${numberedSteps}] RUN ${r}`, 2.8)
+    idx++
+  }
+  for (const e of cfg.exposes) {
+    add(`[${idx}/${numberedSteps}] EXPOSE ${e}`, 0.1)
+    idx++
+  }
+  if (cfg.cmd) {
+    add(`[${idx}/${numberedSteps}] CMD ${JSON.stringify(cfg.cmd.split(/\s+/))}`, 0.1)
+    idx++
+  }
+  add(`exporting to image`, 0.2)
+  add(`=> => exporting layers`, 0.1)
+  add(`=> => writing image sha256:${baseId}`, 0.1)
+  add(`=> => naming to docker.io/library/${name.replace(/^[a-zA-Z0-9]+:\/\//, '')}`, 0)
+
+  const total = steps.length
+  const dur = 3.2 + cfg.runs.length * 2.2
+  const lines = [
+    `[+] Building ${dur.toFixed(1)}s (${total}/${total}) FINISHED`
+  ]
+  for (let i = 0; i < steps.length; i++) {
+    lines.push(` => ${steps[i].txt.padEnd(72, ' ')}${steps[i].dur.toFixed(1)}s`)
+  }
+  lines.push('')
+  lines.push(`View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/${randomId(8)}`)
+  lines.push('')
+  const taggedName = name.includes(':') ? name : `${name}:latest`
+  lines.push(`Successfully built ${baseId}`)
+  lines.push(`Successfully tagged ${taggedName}`)
+  lines.push(`镜像构建成功：${name}`)
+  lines.push(`提示：运行 docker images 可查看新构建的镜像。`)
+
+  buildFromDockerfile(name)
   return { lines, delay: 2000 }
 }
 
@@ -924,7 +1443,16 @@ function dockerNetwork(args) {
       const n = NETWORKS.find(x => x.name === name)
       if (!n) return { type: 'error', lines: [`Error: No such network: ${name}`] }
       const members = CONTAINERS.filter(c => c.network === name || (name === 'bridge' && !c.network))
-      return { lines: [`[`, `    {`, `        "Name": "${n.name}",`, `        "Driver": "${n.driver}",`, `        "Scope": "local"`, `        "Containers": {`, ...members.map(c => `            "${c.shortId}": {"Name": "${c.name}"},`), `        }`, `    }`, `]`] }
+      const memberLines = members.map(c => `            "${c.shortId}": {"Name": "${c.name}", "IPv4Address": "${containerIP(c)}/16"},`)
+      return { lines: [
+        `[`, `    {`, `        "Name": "${n.name}",`,
+        `        "Id": "${randomId(32)}",`,
+        `        "Driver": "${n.driver}",`,
+        `        "Scope": "local"`,
+        `        "Containers": {`,
+        ...memberLines,
+        `        }`, `    }`, `]`
+      ] }
     }
     case 'connect': {
       const [net, cont] = args.slice(1)
@@ -985,6 +1513,19 @@ function dockerInspect(args) {
   const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
   const img = ensureImage(target)
   if (c) {
+    // 挂载信息：从 -v 参数实时解析
+    let mounts = 'null'
+    if (c.volume) {
+      const parts = c.volume.split(':')
+      if (parts.length >= 2) {
+        const src = parts[0].startsWith('/') ? parts[0] : parts[0]
+        const dst = parts[1]
+        const type = src.startsWith('/') ? 'bind' : 'volume'
+        mounts = `[{"Type": "${type}", "Source": "${src}", "Destination": "${dst}", "Mode": "", "RW": true}]`
+      } else {
+        mounts = `[{"Type": "volume", "Name": "${parts[0]}", "Destination": "/data", "RW": true}]`
+      }
+    }
     return { lines: [
       `[`,
       `    {`,
@@ -999,8 +1540,9 @@ function dockerInspect(args) {
       `        },`,
       `        "Image": "${c.image}",`,
       `        "Name": "/${c.name}",`,
-      `        "Mounts": [${c.volume ? `{"Type": "volume", "Name": "${c.volume}", "Destination": "/data"}` : ''}],`,
-      `        "NetworkSettings": { "Networks": { "${c.network || 'bridge'}": {} } }`,
+      `        "Mounts": ${mounts},`,
+      `        "Config": { "Env": [${(c.env || []).map(e => `"${e}"`).join(', ')}] },`,
+      `        "NetworkSettings": { "Networks": { "${c.network || 'bridge'}": { "IPAddress": "${containerIP(c)}" } } }`,
       `    }`,
       `]`
     ] }
@@ -1017,7 +1559,7 @@ function dockerInspect(args) {
       `        "Architecture": "amd64",`,
       `        "Os": "linux",`,
       `        "DockerVersion": "26.1.3",`,
-      `        "Config": { "Cmd": null }`,
+      `        "Config": { "Cmd": ${image.cmd ? `["${image.cmd.split(' ').join('", "')}"]` : 'null'} }`,
       `    }`,
       `]`
     ] }
@@ -1043,10 +1585,104 @@ function dockerPort(args) {
   const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
   if (!c) return { type: 'error', lines: [`Error: No such container: ${target}`] }
   if (!c.ports) return { lines: ['（容器未映射端口）'] }
-  return { lines: [`80/tcp -> 0.0.0.0:${c.ports.split(':')[0]}`] }
+  const [host, container] = c.ports.split(':')
+  return { lines: [`${container}/tcp -> 0.0.0.0:${host}`] }
 }
 
-// --- docker compose ---
+// ---------------------------------------------------------------------------
+// docker compose：从 docker-compose.yml 解析服务定义，动态编排
+// ---------------------------------------------------------------------------
+
+function composeFileText() {
+  const files = {
+    'docker-compose.yml': [
+      'version: "3.8"',
+      '',
+      'services:',
+      '  web:',
+      '    build: .',
+      '    ports:',
+      '      - "8080:3000"',
+      '    depends_on:',
+      '      - db',
+      '',
+      '  db:',
+      '    image: mysql:8.0',
+      '    environment:',
+      '      MYSQL_ROOT_PASSWORD: "123456"',
+      '    volumes:',
+      '      - db_data:/var/lib/mysql',
+      '',
+      'volumes:',
+      '  db_data:'
+    ]
+  }
+  return (files['docker-compose.yml'] || []).join('\n')
+}
+
+function parseComposeYaml(text) {
+  const services = {}
+  const volumes = []
+  let section = null      // 'services' | 'volumes' | null
+  let curSvc = null
+  let svcField = null     // 当前服务下的字段（image/ports/environment/...）
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/#.*$/, '').replace(/\s+$/, '')
+    if (!line.trim()) continue
+    const indent = (line.match(/^\s*/) || [''])[0].length
+    const content = line.trim()
+    if (indent === 0) {
+      section = content.replace(/:$/, '')
+      curSvc = null
+      svcField = null
+      continue
+    }
+    if (section === 'services' && indent === 2 && /^[a-zA-Z0-9_-]+:\s*$/.test(content)) {
+      curSvc = content.replace(/:$/, '')
+      if (!services[curSvc]) services[curSvc] = { image: null, build: null, ports: [], env: [], volumes: [], depends: [], cmd: null }
+      svcField = null
+      continue
+    }
+    if (section === 'volumes' && indent === 2 && /^[a-zA-Z0-9_.-]+:\s*$/.test(content)) {
+      volumes.push(content.replace(/:$/, ''))
+      continue
+    }
+    if (curSvc && indent === 4) {
+      const m = content.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/)
+      if (m) {
+        svcField = m[1]
+        const val = m[2].trim()
+        if (svcField === 'image' && val) services[curSvc].image = val.replace(/["']/g, '')
+        if (svcField === 'build' && val) services[curSvc].build = val.replace(/["']/g, '') || '.'
+        if (svcField === 'command' && val) services[curSvc].cmd = val.replace(/["']/g, '')
+        if (svcField === 'container_name' && val) services[curSvc].containerName = val.replace(/["']/g, '')
+        continue
+      }
+    }
+    if (curSvc && svcField && indent >= 6) {
+      // 列表项
+      const item = content.replace(/^-\s*/, '').replace(/["']/g, '')
+      if (!item) continue
+      if (svcField === 'ports') services[curSvc].ports.push(item)
+      else if (svcField === 'volumes') services[curSvc].volumes.push(item)
+      else if (svcField === 'depends_on') services[curSvc].depends.push(item.split(':')[0])
+      else if (svcField === 'environment') services[curSvc].env.push(item.includes('=') ? item : `${item.split(':')[0]}=${(item.split(':')[1] || '').trim()}`)
+      else if (svcField === 'command') services[curSvc].cmd = item
+    }
+  }
+  return { services, volumes }
+}
+
+const COMPOSE_PROJECT = 'docker-project'
+
+function composeServices() {
+  return parseComposeYaml(composeFileText())
+}
+
+function composeContainers() {
+  return CONTAINERS.filter(c => c.composeProject === COMPOSE_PROJECT)
+}
+
 function runCompose(args) {
   if (args.length === 0 || ['help', '-h'].includes(args[0])) {
     return { lines: [
@@ -1071,18 +1707,79 @@ function runCompose(args) {
   }
 
   const sub = args[0]
+  const { services, volumes } = composeServices()
+  const names = Object.keys(services)
+
   switch (sub) {
     case 'up': {
-      const names = ['web', 'db', 'redis']
-      const out = names.map((n, i) => {
-        const port = 3000 + i
-        return `[+] Running ${i + 1}/${names.length}                                                      ✔ Container project-${n}-1  Started`
-      })
+      const netName = COMPOSE_PROJECT + '_default'
+      if (!NETWORKS.some(n => n.name === netName)) {
+        NETWORKS.push({ name: netName, driver: 'bridge', scope: 'local' })
+      }
+      const out = []
+      const upserted = []
+      let i = 0
+      for (const name of names) {
+        const svc = services[name]
+        i++
+        // 服务镜像：build 服务从 Dockerfile 构建，image 服务确保本地存在
+        let imageRef = null
+        if (svc.build) {
+          imageRef = buildFromDockerfile(`${COMPOSE_PROJECT}-${name}:latest`)
+        } else if (svc.image) {
+          const ref = svc.image.includes(':') ? svc.image : svc.image + ':latest'
+          if (!IMAGE_DB[ref] && REMOTE_IMAGES[svc.image] || !IMAGE_DB[ref] && REMOTE_IMAGES[ref]) {
+            const repo = ref.split(':')[0]
+            const tag = ref.split(':')[1] || 'latest'
+            IMAGE_DB[ref] = { repo, tag, id: 'sha256:' + randomId(12), size: (REMOTE_IMAGES[ref] || REMOTE_IMAGES[svc.image] || { size: '100MB' }).size, created: 'just now', status: '已下载' }
+          } else if (!IMAGE_DB[ref] && !REMOTE_IMAGES[ref] && !REMOTE_IMAGES[svc.image]) {
+            IMAGE_DB[ref] = { repo: ref.split(':')[0], tag: ref.split(':')[1] || 'latest', id: 'sha256:' + randomId(12), size: '100MB', created: 'just now', status: '已下载' }
+          }
+          imageRef = ref
+        } else {
+          imageRef = 'busybox:latest'
+        }
+        const cname = svc.containerName || `${COMPOSE_PROJECT}-${name}-1`
+        let c = CONTAINERS.find(x => x.name === cname)
+        if (!c) {
+          const id = genContainerId()
+          c = {
+            id,
+            shortId: id.slice(0, 12),
+            image: imageRef,
+            imageKey: imageRef,
+            command: svc.cmd || '',
+            created: now(),
+            createdAt: Date.now(),
+            status: 'running',
+            name: cname,
+            ports: svc.ports.length ? svc.ports[0].replace(/^\[|\]$/g, '') : null,
+            volume: svc.volumes.length ? svc.volumes[0].replace(/^\[|\]$/g, '') : null,
+            env: svc.env,
+            network: netName,
+            composeProject: COMPOSE_PROJECT,
+            fs: {}
+          }
+          CONTAINERS.unshift(c)
+        } else {
+          c.status = 'running'
+          c.createdAt = Date.now()
+        }
+        upserted.push(c)
+        c.logs = buildContainerLogs(c)
+        out.push(`[+] Running ${i}/${names.length}${' '.repeat(50 - String(i).length - String(names.length).length)}✔ Container ${cname}  Started`)
+      }
+      // 声明卷
+      for (const v of volumes) {
+        if (!VOLUMES.some(x => x.name === v)) {
+          VOLUMES.push({ name: v, driver: 'local', mountpoint: `/var/lib/docker/volumes/${v}/_data` })
+        }
+      }
       return {
         lines: [
-          `[+] Running 3/3`,
-          ` ✔ Network project_default          Created`,
-          ` ✔ Volume "project_db_data"         Created`,
+          `[+] Running ${names.length}/${names.length}`,
+          ` ✔ Network ${netName}          Created`,
+          ...volumes.map(v => ` ✔ Volume "${v}"         Created`),
           ...out,
           '',
           `提示：docker compose ps 可查看服务状态；docker compose down 可停止并删除。`
@@ -1091,14 +1788,110 @@ function runCompose(args) {
       }
     }
     case 'down': {
-      return { lines: [`[+] Running 2/2`, ` ✔ Container project-web-1      Removed`, ` ✔ Network project_default      Removed`, ''], delay: 800 }
+      const rmVols = args.includes('-v')
+      const cs = composeContainers()
+      const lines = [`[+] Running ${cs.length + 1}/${cs.length + 1}`]
+      for (const c of cs) {
+        lines.push(` ✔ Container ${c.name}      Removed`)
+        const idx = CONTAINERS.indexOf(c)
+        if (idx > -1) CONTAINERS.splice(idx, 1)
+      }
+      const netName = COMPOSE_PROJECT + '_default'
+      const nIdx = NETWORKS.findIndex(n => n.name === netName)
+      if (nIdx > -1) {
+        lines.push(` ✔ Network ${netName}      Removed`)
+        NETWORKS.splice(nIdx, 1)
+      }
+      if (rmVols) {
+        for (const v of (composeServices().volumes)) {
+          const vIdx = VOLUMES.findIndex(x => x.name === v)
+          if (vIdx > -1) {
+            lines.push(` ✔ Volume "${v}"         Removed`)
+            VOLUMES.splice(vIdx, 1)
+          }
+        }
+      }
+      lines.push('')
+      return { lines, delay: 800 }
     }
     case 'ps': {
-      return { lines: ['NAME                 IMAGE          COMMAND                  SERVICE   CREATED          STATUS', 'project-web-1         nginx:latest   "/docker-entrypoint.…"   web       2 minutes ago   Up 2 minutes', 'project-db-1          mysql:8.0      "docker-entrypoint.s…"   db        2 minutes ago   Up 2 minutes'], delay: 300 }
+      const cs = composeContainers()
+      if (!cs.length) {
+        return { lines: ['NAME                IMAGE     COMMAND   SERVICE   CREATED   STATUS', '（先执行 docker compose up -d 启动服务）'], delay: 300 }
+      }
+      const header = 'NAME                 IMAGE          COMMAND                  SERVICE   CREATED          STATUS'
+      const rows = cs.map(c => {
+        const svc = c.name.replace(new RegExp(`^${COMPOSE_PROJECT}-`), '').replace(/-\d+$/, '')
+        const img = (c.image || '').padEnd(13, ' ')
+        const cmdStr = (c.command || '').slice(0, 21).padEnd(22, ' ')
+        const created = timeAgo(c.createdAt)
+        const status = containerStatusText(c)
+        return ` ${c.name.padEnd(18, ' ')} ${img} ${cmdStr} ${svc.padEnd(8, ' ')} ${created}  ${status}`
+      })
+      return { lines: [header, ...rows], delay: 300 }
     }
-    case 'config': return { lines: ['services:', '  web:', '    image: nginx:latest', '    ports:', '      - "8080:80"', '  db:', '    image: mysql:8.0', '    environment:', '      MYSQL_ROOT_PASSWORD: 123456'], delay: 300 }
-    case 'logs': return { lines: ['web-1  | ready for start up', 'db-1   | ready for connections.'], delay: 400 }
-    case 'build': return { lines: ['[+] Building 2.0s (7/7) FINISHED', 'web-1  Built'], delay: 800 }
+    case 'config': {
+      const out = ['name: ' + COMPOSE_PROJECT, 'services:']
+      for (const name of names) {
+        const svc = services[name]
+        out.push(`  ${name}:`)
+        out.push(`    image: ${svc.build ? `${COMPOSE_PROJECT}-${name}:latest` : svc.image || ''}`)
+        if (svc.build) out.push(`    build:`)
+        if (svc.ports.length) {
+          out.push('    ports:')
+          for (const p of svc.ports) out.push(`      - ${p}`)
+        }
+        if (svc.env.length) {
+          out.push('    environment:')
+          for (const e of svc.env) out.push(`      ${e}`)
+        }
+        if (svc.volumes.length) {
+          out.push('    volumes:')
+          for (const v of svc.volumes) out.push(`      - ${v}`)
+        }
+        if (svc.depends.length) {
+          out.push('    depends_on:')
+          for (const d of svc.depends) out.push(`      - ${d}`)
+        }
+      }
+      out.push('networks:')
+      out.push(`  default:`)
+      out.push(`    name: ${COMPOSE_PROJECT}_default`)
+      if (composeServices().volumes.length) {
+        out.push('volumes:')
+        for (const v of composeServices().volumes) out.push(`  ${v}:`)
+      }
+      return { lines: out, delay: 300 }
+    }
+    case 'logs': {
+      const svcName = args[1]
+      const cs = composeContainers()
+      if (!cs.length) return { lines: ['（先执行 docker compose up -d 启动服务）'], delay: 300 }
+      const targets = svcName ? cs.filter(c => c.name.includes('-' + svcName + '-')) : cs
+      if (!targets.length) return { type: 'error', lines: [`no such service: ${svcName}`] }
+      const out = []
+      for (const c of targets) {
+        const svc = c.name.replace(new RegExp(`^${COMPOSE_PROJECT}-`), '').replace(/-\d+$/, '')
+        for (const l of (c.logs || buildContainerLogs(c))) out.push(`${svc}-1  | ${l}`)
+      }
+      return { lines: out, delay: 400 }
+    }
+    case 'build': {
+      const out = []
+      for (const name of names) {
+        if (!services[name].build) continue
+        const ref = `${COMPOSE_PROJECT}-${name}:latest`
+        buildFromDockerfile(ref)
+        out.push(`[+] Building ${(2 + Math.random() * 2).toFixed(1)}s (${7}/${7}) FINISHED`)
+        out.push(`${name}-1  Built`)
+      }
+      if (!out.length) out.push('（没有需要构建的 build 服务）')
+      return { lines: out, delay: 800 }
+    }
+    case 'stop': {
+      for (const c of composeContainers()) { c.status = 'exited'; c.exitedAt = Date.now() }
+      return { lines: ['[+] Running 1/1', ' ✔ Container stopped'], delay: 500 }
+    }
     default: return { type: 'error', lines: [`docker compose: unknown command: ${sub}`] }
   }
 }
@@ -1107,65 +1900,11 @@ function runCompose(args) {
 function runCat(args) {
   const file = args[0]
   if (!file) return { type: 'error', lines: ['cat: missing operand'] }
-  const files = {
-    'Dockerfile': [
-      '# 使用官方 Node.js 镜像作为基础镜像',
-      'FROM node:20-alpine',
-      '',
-      '# 设置工作目录',
-      'WORKDIR /app',
-      '',
-      '# 复制依赖清单并安装依赖',
-      'COPY package*.json ./',
-      'RUN npm install',
-      '',
-      '# 复制项目代码',
-      'COPY . .',
-      '',
-      '# 暴露端口',
-      'EXPOSE 3000',
-      '',
-      '# 启动命令',
-      'CMD ["node", "app.js"]'
-    ],
-    'app.js': [
-      "const http = require('http');",
-      '',
-      "const server = http.createServer((req, res) => {",
-      "  res.writeHead(200, { 'Content-Type': 'text/plain' });",
-      "  res.end('Hello from Docker!\\n');",
-      '});',
-      '',
-      'server.listen(3000, () => {',
-      "  console.log('Server running at http://localhost:3000');",
-      '});'
-    ],
-    'package.json': ['{', '  "name": "docker-project",', '  "version": "1.0.0",', '  "main": "app.js"', '}'],
-    'docker-compose.yml': [
-      'version: "3.8"',
-      '',
-      'services:',
-      '  web:',
-      '    build: .',
-      '    ports:',
-      '      - "8080:3000"',
-      '    depends_on:',
-      '      - db',
-      '',
-      '  db:',
-      '    image: mysql:8.0',
-      '    environment:',
-      '      MYSQL_ROOT_PASSWORD: "123456"',
-      '    volumes:',
-      '      - db_data:/var/lib/mysql',
-      '',
-      'volumes:',
-      '  db_data:'
-    ]
-  }
-  const content = files[file]
-  if (!content) return { type: 'error', lines: [`cat: ${file}: No such file or directory`] }
-  return { lines: content }
+  let content
+  if (file === 'docker-compose.yml') content = composeFileText()
+  else content = HOST_PROJECT_FILES[file]
+  if (content === undefined) return { type: 'error', lines: [`cat: ${file}: No such file or directory`] }
+  return { lines: content.replace(/\n$/, '').split('\n') }
 }
 
 // ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@
                     :key="'st-' + f.path"
                     size="small"
                     effect="light"
-                    type="success"
+                    :type="f.status === 'new' ? 'success' : f.status === 'deleted' ? 'danger' : 'warning'"
                     class="area-tag"
                   >
                     {{ f.path }}
@@ -279,10 +279,18 @@ const workingFiles = computed(() => {
     .map((s) => ({ path: s.path, status: s.working === '?' ? 'untracked' : s.working === 'D' ? 'deleted' : 'modified' }))
 })
 
+// 暂存区：直接从引擎的 staged 对象读取，而不是 status 过滤后的结果。
+// 这样即使文件与 HEAD 无变化，学习者也能看到当前已 add 的内容。
 const stagedFiles = computed(() => {
-  return statusMap.value
-    .filter((s) => s.index !== ' ')
-    .map((s) => ({ path: s.path }))
+  if (!env.value.initialized) return []
+  const headHash = env.value.detached ? env.value.detachedAt : env.value.branches[env.value.head]
+  const tree = headHash ? env.value.commits[headHash]?.files || {} : {}
+  return Object.entries(env.value.staged).map(([path, content]) => {
+    let status: 'new' | 'modified' | 'deleted' = 'modified'
+    if (content === null) status = 'deleted'
+    else if (!Object.prototype.hasOwnProperty.call(tree, path)) status = 'new'
+    return { path, status }
+  })
 })
 
 const branchList = computed(() => {
