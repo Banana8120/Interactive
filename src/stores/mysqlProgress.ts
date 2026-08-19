@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { gitChapters } from '@/data/gitLessons'
-import type { GitChapter, GitLesson } from '@/types'
+import { mysqlChapters } from '@/data/mysqlLessons'
+import type { MySqlChapter, MySqlLesson } from '@/types'
 
-const STORAGE_KEY = 'git-tutorial-progress-v1'
+const STORAGE_KEY = 'mysql-tutorial-progress-v1'
 
-export interface GitProgressState {
+export interface MySqlProgressState {
   completedLessons: string[]
   hintsUsed: Record<string, number>
   lastVisited: string | null
@@ -12,11 +12,11 @@ export interface GitProgressState {
   startedAt: number
 }
 
-function loadState(): GitProgressState {
+function loadState(): MySqlProgressState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const state = JSON.parse(raw) as Partial<GitProgressState>
+      const state = JSON.parse(raw) as Partial<MySqlProgressState>
       return {
         completedLessons: state.completedLessons || [],
         hintsUsed: state.hintsUsed || {},
@@ -31,20 +31,20 @@ function loadState(): GitProgressState {
   return { completedLessons: [], hintsUsed: {}, lastVisited: null, lastVisitedAt: 0, startedAt: Date.now() }
 }
 
-export const useGitProgressStore = defineStore('gitProgress', {
-  state: (): GitProgressState => loadState(),
+export const useMySqlProgressStore = defineStore('mysqlProgress', {
+  state: (): MySqlProgressState => loadState(),
 
   getters: {
-    totalLessons: () => gitChapters.reduce((s: number, c: GitChapter) => s + c.lessons.length, 0),
-    totalChapters: () => gitChapters.length,
+    totalLessons: () => mysqlChapters.reduce((s: number, c: MySqlChapter) => s + c.lessons.length, 0),
+    totalChapters: () => mysqlChapters.length,
     completedCount: (state): number => state.completedLessons.length,
     overallPercent: (state): number => {
-      const total = gitChapters.reduce((s, c) => s + c.lessons.length, 0)
+      const total = mysqlChapters.reduce((s, c) => s + c.lessons.length, 0)
       return total ? Math.round((state.completedLessons.length / total) * 100) : 0
     },
     isLessonCompleted: (state) => (lessonId: string): boolean => state.completedLessons.includes(lessonId),
     chapterProgress(state) {
-      return gitChapters.map((ch) => {
+      return mysqlChapters.map((ch) => {
         const done = ch.lessons.filter((l) => state.completedLessons.includes(l.id)).length
         return {
           id: ch.id,
@@ -55,14 +55,13 @@ export const useGitProgressStore = defineStore('gitProgress', {
       })
     },
     chapterPercent: (state) => (chapterId: string): number => {
-      const ch = gitChapters.find((c) => c.id === chapterId)
+      const ch = mysqlChapters.find((c) => c.id === chapterId)
       if (!ch) return 0
       const done = ch.lessons.filter((l) => state.completedLessons.includes(l.id)).length
       return Math.round((done / ch.lessons.length) * 100)
     },
-    /** 推荐下一课时：第一个未完成的课时 */
-    recommendedLesson(state): (GitLesson & { chapter: GitChapter }) | null {
-      for (const ch of gitChapters) {
+    recommendedLesson(state): (MySqlLesson & { chapter: MySqlChapter }) | null {
+      for (const ch of mysqlChapters) {
         for (const l of ch.lessons) {
           if (!state.completedLessons.includes(l.id)) return { ...l, chapter: ch }
         }
@@ -89,7 +88,6 @@ export const useGitProgressStore = defineStore('gitProgress', {
       this.persist()
     },
 
-    /** 记录某个课时使用提示的次数（用于“卡住”检测与推荐） */
     recordHint(lessonId: string, level: number) {
       if (level > (this.hintsUsed[lessonId] || 0)) {
         this.hintsUsed[lessonId] = level

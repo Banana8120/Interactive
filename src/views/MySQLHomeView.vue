@@ -1,21 +1,20 @@
-﻿<template>
-  <div class="git-home">
-    <!-- Hero 区 -->
+<template>
+  <div class="mysql-home">
     <section class="hero">
       <div class="hero-bg"></div>
       <div class="hero-inner">
-        <div class="hero-logo">Git</div>
-        <h1 class="hero-title">交互式 Git 学习</h1>
+        <div class="hero-logo">SQL</div>
+        <h1 class="hero-title">交互式 MySQL 学习</h1>
         <p class="hero-desc">
-          面向初学者的 Git 交互式课程 —— 从初始化仓库、第一次提交，到分支合并、远程协作与进阶技巧，
-          每个知识点都配有一个可以在浏览器中直接操作的模拟仓库。
+          从数据库、表结构、字段类型开始，到插入、查询、更新和删除数据。
+          每节课都可以直接输入 SQL，并在数据面板里观察库、表和行数据的变化。
         </p>
 
         <div class="hero-actions">
           <n-button type="primary" size="large" round @click="startLearning">
             <n-icon><VideoPlay /></n-icon>&nbsp;{{ store.recommendedLesson ? '继续学习' : '开始学习' }}
           </n-button>
-          <n-button size="large" round @click="$router.push('/git/lesson/git-intro-1')">
+          <n-button size="large" round @click="$router.push('/mysql/lesson/mysql-intro-1')">
             <n-icon><Guide /></n-icon>&nbsp;从第一课开始
           </n-button>
         </div>
@@ -38,40 +37,38 @@
           <div class="stat-divider"></div>
           <div class="stat-item">
             <div class="stat-num">{{ store.overallPercent }}%</div>
-            <div class="stat-label">学习进度</div>
+            <div class="stat-label">已完成</div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 推荐继续 -->
     <n-card v-if="recommend" :bordered="true" class="recommend-card">
       <div class="recommend-row">
         <div class="recommend-info">
-          <n-tag size="small" type="error" :bordered="false" round>智能推荐</n-tag>
+          <n-tag size="small" type="info" :bordered="false" round>智能推荐</n-tag>
           <span>
             下一步：<b>{{ recommend.chapter.title }}</b> · {{ recommend.title }}
             <span v-if="store.hintLevel(recommend.id) > 0" class="hint-flag">
-              （你查看过 {{ store.hintLevel(recommend.id) }} 条提示，建议复习）
+              （你查看过 {{ store.hintLevel(recommend.id) }} 条提示）
             </span>
           </span>
         </div>
-        <n-button type="error" round @click="$router.push(`/git/lesson/${recommend.id}`)">
+        <n-button type="info" round @click="$router.push(`/mysql/lesson/${recommend.id}`)">
           继续学习 <n-icon><Right /></n-icon>
         </n-button>
       </div>
-      <n-progress :percentage="store.overallPercent" :stroke-width="12" color="#F05032" processing />
+      <n-progress :percentage="store.overallPercent" :stroke-width="12" color="#00618A" processing />
     </n-card>
 
-    <!-- 章节卡片 -->
     <div class="section-title">
-      <h2>学习路径（从基础到进阶）</h2>
-      <p>建议按顺序学习，每节都包含讲解与可实操的练习任务</p>
+      <h2>学习路径</h2>
+      <p>按顺序完成每个练习，观察右侧数据面板如何随 SQL 改变</p>
     </div>
 
     <div class="chapter-grid">
       <div
-        v-for="(ch, i) in gitChapters"
+        v-for="(ch, i) in mysqlChapters"
         :key="ch.id"
         class="chapter-card"
         :style="{ '--ch-color': ch.color }"
@@ -119,7 +116,6 @@
       </div>
     </div>
 
-    <!-- 特色说明 -->
     <div class="feature-row">
       <div class="feature-item" v-for="f in features" :key="f.title">
         <div class="feature-icon" :style="{ background: f.color + '1a', color: f.color }">
@@ -137,30 +133,28 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { gitChapters, gitStats } from '@/data/gitLessons'
-import { useGitProgressStore } from '@/stores/gitProgress'
-import type { GitChapter, GitLesson } from '@/types'
+import { mysqlChapters, mysqlStats } from '@/data/mysqlLessons'
+import { useMySqlProgressStore } from '@/stores/mysqlProgress'
+import type { MySqlChapter, MySqlLesson } from '@/types'
 
 const router = useRouter()
-const store = useGitProgressStore()
+const store = useMySqlProgressStore()
 
-const stats = gitStats
-const recommend = computed(() => store.recommendedLesson as (GitLesson & { chapter: GitChapter }) | null)
+const stats = mysqlStats
+const recommend = computed(() => store.recommendedLesson as (MySqlLesson & { chapter: MySqlChapter }) | null)
 
 const chapterDone = (id: string) => store.chapterProgress.find((c) => c.id === id)?.percent === 100
 
 const startLearning = () => {
   if (store.recommendedLesson) {
-    router.push(`/git/lesson/${store.recommendedLesson.id}`)
+    router.push(`/mysql/lesson/${store.recommendedLesson.id}`)
   } else {
-    router.push(`/git/lesson/${gitChapters[0].lessons[0].id}`)
+    router.push(`/mysql/lesson/${mysqlChapters[0].lessons[0].id}`)
   }
 }
 
-const goChapter = (ch: GitChapter) => {
-  router.push({ path: '/git', query: { ch: ch.id } })
-  // 跳转到该章第一课
-  router.push(`/git/lesson/${ch.lessons[0].id}`)
+const goChapter = (ch: MySqlChapter) => {
+  router.push(`/mysql/lesson/${ch.lessons[0].id}`)
 }
 
 interface Feature {
@@ -171,15 +165,15 @@ interface Feature {
 }
 
 const features: Feature[] = [
-  { title: '知识体系完整', desc: '参考 Gitee Git 大全，覆盖基础操作到进阶技巧', icon: 'Guide', color: '#F05032' },
-  { title: '模拟仓库实操', desc: '浏览器内直接输入 git 命令，实时查看仓库变化', icon: 'Monitor', color: '#00B96B' },
-  { title: '智能提示引导', desc: '错误命令自动纠错，卡住时给出分级线索提示', icon: 'ChatLineRound', color: '#F7A600' },
-  { title: '进度与推荐', desc: '自动跟踪学习进度，按你的水平推荐下一步练习', icon: 'TrendCharts', color: '#7B61FF' }
+  { title: 'SQL 标准写法', desc: '关键字、字段、分号和常见子句按真实 MySQL 风格组织', icon: 'Document', color: '#00618A' },
+  { title: '数据面板联动', desc: '每次 INSERT、UPDATE、DELETE 都能看到表数据变化', icon: 'Database', color: '#00A3C4' },
+  { title: '智能命令提示', desc: '根据当前数据库和表，给出可直接点击或 Tab 补全的 SQL', icon: 'ChatLineRound', color: '#F7A600' },
+  { title: '安全习惯训练', desc: '重点强调 WHERE、主键、自增和删除清空的风险边界', icon: 'WarningFilled', color: '#E85D75' }
 ]
 </script>
 
 <style scoped>
-.git-home {
+.mysql-home {
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -188,7 +182,7 @@ const features: Feature[] = [
   position: relative;
   border-radius: 16px;
   overflow: hidden;
-  background: linear-gradient(135deg, #3d0e0e 0%, #a52a14 55%, #f05032 100%);
+  background: linear-gradient(135deg, #003b57 0%, #00618a 56%, #00a3c4 100%);
   padding: 56px 32px 44px;
   color: #fff;
   text-align: center;
@@ -198,8 +192,10 @@ const features: Feature[] = [
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.08) 0, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(255, 255, 255, 0.07) 0, transparent 45%);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 46px 46px;
+  opacity: 0.35;
   pointer-events: none;
 }
 
@@ -215,21 +211,14 @@ const features: Feature[] = [
   height: 84px;
   border-radius: 18px;
   background: #fff;
-  color: #f05032;
-  font-size: 40px;
+  color: #00618a;
+  font-size: 34px;
   font-weight: 900;
-  font-style: italic;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  animation: float 3.5s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .hero-title {
@@ -257,22 +246,14 @@ const features: Feature[] = [
 .hero-actions :deep(.n-button--primary-type) {
   background: #fff;
   border-color: #fff;
-  color: #c9472c;
+  color: #00618a;
   font-weight: 700;
-}
-
-.hero-actions :deep(.n-button--primary-type:hover) {
-  background: #fff3f0;
 }
 
 .hero-actions :deep(.n-button:not(.n-button--primary-type)) {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.45);
   color: #fff;
-}
-
-.hero-actions :deep(.n-button:not(.n-button--primary-type):hover) {
-  background: rgba(255, 255, 255, 0.24);
 }
 
 .hero-stats {
@@ -308,7 +289,7 @@ const features: Feature[] = [
 .recommend-card {
   border-radius: 12px;
   margin-top: 20px;
-  border: 1px solid rgba(240, 80, 50, 0.25);
+  border: 1px solid rgba(0, 97, 138, 0.25);
 }
 
 .recommend-row {
@@ -326,10 +307,6 @@ const features: Feature[] = [
   gap: 8px;
   font-size: 14px;
   color: var(--text-main);
-}
-
-.recommend-info .n-icon {
-  color: #f7a600;
 }
 
 .hint-flag {
@@ -373,7 +350,7 @@ const features: Feature[] = [
 
 .chapter-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 10px 28px rgba(240, 80, 50, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 97, 138, 0.12);
   border-color: var(--ch-color);
 }
 
@@ -520,5 +497,3 @@ const features: Feature[] = [
   }
 }
 </style>
-
-

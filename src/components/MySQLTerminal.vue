@@ -1,6 +1,5 @@
-﻿<template>
+<template>
   <div class="terminal-shell">
-    <!-- 终端标题栏 -->
     <div class="terminal-bar">
       <div class="dots">
         <span class="dot red"></span>
@@ -9,7 +8,7 @@
       </div>
       <span class="terminal-title">
         <n-icon><Monitor /></n-icon>
-        git 模拟终端
+        mysql 模拟终端
       </span>
       <div class="terminal-actions">
         <n-tooltip placement="bottom">
@@ -22,16 +21,15 @@
           <template #trigger>
             <button class="icon-btn" @click="resetEnv"><n-icon><Refresh /></n-icon></button>
           </template>
-          重置仓库环境
+          重置数据库环境
         </n-tooltip>
       </div>
     </div>
 
-    <!-- 终端输出区 -->
     <div ref="outputRef" class="terminal-output" @click="focusInput">
       <div v-for="(block, i) in history" :key="i" class="term-block">
         <div class="term-prompt-line" v-if="block.input !== undefined">
-          <span class="term-prompt">learner@git:~$</span>
+          <span class="term-prompt">{{ block.prompt || promptText }}</span>
           <span class="term-input-text" :class="{ 'has-error': block.error }">{{ block.input }}</span>
         </div>
         <div class="term-output-lines" v-if="block.lines && block.lines.length">
@@ -50,7 +48,7 @@
       </div>
 
       <div class="term-input-line">
-        <span class="term-prompt">learner@git:~$</span>
+        <span class="term-prompt">{{ promptText }}</span>
         <input
           ref="inputRef"
           v-model="current"
@@ -59,7 +57,7 @@
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"
-          placeholder="输入 git 命令，如 git status"
+          placeholder="输入 SQL，如 SHOW DATABASES;"
           @keydown.enter.prevent="submit"
           @keydown.up.prevent="historyBack"
           @keydown.down.prevent="historyForward"
@@ -67,9 +65,17 @@
         />
         <span class="term-cursor static"></span>
       </div>
+
+      <div class="smart-suggest" v-if="smartSuggestions.length">
+        <button
+          v-for="s in smartSuggestions"
+          :key="s"
+          class="smart-chip"
+          @click.stop="applySuggestion(s)"
+        >{{ s }}</button>
+      </div>
     </div>
 
-    <!-- 建议命令 -->
     <div class="term-suggest" v-if="suggestions.length">
       <div class="suggest-label">本练习建议命令：</div>
       <div class="suggest-chips">
@@ -85,17 +91,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue'
-import { executeGitCommand, getGitState } from '@/terminal/gitSimulator'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { executeMySqlCommand, getMySqlState } from '@/terminal/mysqlSimulator'
 
 interface TermBlock {
   input?: string
+  prompt?: string
   error?: boolean
   lines?: string[]
   typing?: boolean
 }
 
-type ExecuteResult = ReturnType<typeof executeGitCommand>
+type ExecuteResult = ReturnType<typeof executeMySqlCommand>
 
 interface Props {
   suggestions?: string[]
@@ -120,7 +127,62 @@ const historyStack = ref<string[]>([])
 const historyIndex = ref(-1)
 const typingLines = ref<string[]>([])
 const busy = ref(false)
+const refreshTick = ref(0)
 let errorStreak = 0
+
+const promptText = computed(() => {
+  refreshTick.value
+  const state = getMySqlState()
+  if (!state.connected) return 'learner@mysql:~$'
+  return state.currentDatabase ? `mysql [${state.currentDatabase}]>` : 'mysql>'
+})
+
+const baseCommands = computed(() => {
+  refreshTick.value
+  const state = getMySqlState()
+  const dbs = Object.keys(state.databases).filter((name) => !state.databases[name].system)
+  const currentDb = state.currentDatabase ? state.databases[state.currentDatabase] : null
+  const tables = currentDb ? Object.keys(currentDb.tables) : []
+  const dynamic = [
+    ...dbs.map((db) => `USE ${db};`),
+    ...tables.map((table) => `DESC ${table};`),
+    ...tables.map((table) => `SELECT * FROM ${table};`),
+    ...tables.map((table) => `SHOW TABLES;`)
+  ]
+  return uniq([
+    ...props.suggestions,
+    'mysql --version',
+    'mysql -u root -p',
+    'SHOW DATABASES;',
+    'CREATE DATABASE shop;',
+    'USE shop;',
+    'SELECT DATABASE();',
+    'CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50) NOT NULL, age INT);',
+    "INSERT INTO users (name, age) VALUES ('Ada', 18);",
+    'SELECT * FROM users;',
+    'SELECT name, age FROM users WHERE age >= 18 ORDER BY id DESC LIMIT 2;',
+    "UPDATE users SET age = 20 WHERE name = 'Ada';",
+    "DELETE FROM users WHERE name = 'Ada';",
+    'ALTER TABLE users ADD COLUMN email VARCHAR(80);',
+    'TRUNCATE TABLE users;',
+    'DROP TABLE users;',
+    'help',
+    'clear',
+    ...dynamic
+  ])
+})
+
+const smartSuggestions = computed(() => {
+  const base = current.value.trim().toLowerCase()
+  if (!base) return props.suggestions.slice(0, 5)
+  return baseCommands.value
+    .filter((cmd) => cmd.toLowerCase().startsWith(base) && cmd.toLowerCase() !== base)
+    .slice(0, 6)
+})
+
+function uniq(list: string[]) {
+  return Array.from(new Set(list.filter(Boolean)))
+}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -142,12 +204,14 @@ function pushBlock(block: TermBlock) {
 async function submit() {
   const input = current.value.trim()
   if (!input || busy.value) return
+  const usedPrompt = promptText.value
   current.value = ''
   historyStack.value.push(input)
   historyIndex.value = -1
 
-  const result: ExecuteResult = executeGitCommand(input)
-  pushBlock({ input, error: result.type === 'error', lines: [] })
+  const result: ExecuteResult = executeMySqlCommand(input)
+  refreshTick.value++
+  pushBlock({ input, prompt: usedPrompt, error: result.type === 'error', lines: [] })
 
   if (result.type === 'clear') {
     clearScreen()
@@ -163,7 +227,7 @@ async function submit() {
   }
 
   setTimeout(() => {
-    if (result.delay > 0 && history.value.length) {
+    if (result.delay && history.value.length) {
       const last = history.value[history.value.length - 1]
       if (last && last.typing) history.value.pop()
     }
@@ -174,7 +238,6 @@ async function submit() {
     busy.value = false
     typingLines.value = []
     const ok = result.type !== 'error'
-    // 连续错误计数：用于“卡住”检测（触发任务面板自动提示）
     errorStreak = ok ? 0 : errorStreak + 1
     emit('command-executed', { input, ok, errorStreak })
     scrollToBottom()
@@ -199,32 +262,14 @@ function historyForward() {
   }
 }
 
-const GIT_SUBS = [
-  'git init', 'git status', 'git add ', 'git commit -m ', 'git log --oneline',
-  'git diff', 'git branch ', 'git checkout ', 'git switch ', 'git merge ',
-  'git remote add origin ', 'git push', 'git pull', 'git tag -a ',
-  'git stash', 'git stash list', 'git stash pop', 'git reset --hard ',
-  'git revert ', 'git cherry-pick ', 'git reflog', 'git rm ', 'git mv ',
-  'git config --global user.name ', 'git config --global user.email ', 'git show ',
-  'git grep -n ', 'git blame ', 'git shortlog -s -n', 'git archive -o project.tar HEAD',
-  'git worktree list', 'git worktree add ', 'git worktree remove ',
-  'git bisect start', 'git bisect good ', 'git bisect bad ', 'git bisect reset',
-  'git gc', 'git fsck'
-]
-
 function autocomplete() {
-  const base = current.value.trim()
-  if (!base) return
-  // 补全 git 子命令
-  const hit = GIT_SUBS.find((c) => c.startsWith(base) && c !== base)
-  if (hit) { current.value = hit; return }
-  // 补全分支名
-  const m = base.match(/^(git (?:checkout|switch|merge|branch -d|branch)\s+)(\S*)$/)
-  if (m) {
-    const s = getGitState()
-    const names = Object.keys(s.branches).filter((n) => n.startsWith(m[2]))
-    if (names.length === 1) current.value = m[1] + names[0]
-  }
+  const hit = smartSuggestions.value[0]
+  if (hit) current.value = hit
+}
+
+function applySuggestion(cmd: string) {
+  current.value = cmd
+  focusInput()
 }
 
 function quickRun(cmd: string) {
@@ -233,17 +278,15 @@ function quickRun(cmd: string) {
 }
 
 function resetEnv() {
-  // 由父组件统一处理缓存清除与状态重置，确保 localStorage 同步清理
   emit('reset-environment')
 }
 
-// 简单语法高亮
 const highlight = (line: string): string => {
   if (!line) return '&nbsp;'
   let s = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  s = s.replace(/\b[0-9a-f]{7,40}\b/g, '<span class="hl-hash">$&</span>')
-  s = s.replace(/\b(git|git commit|git add|git checkout)\b/g, '<span class="hl-cmd">$&</span>')
-  s = s.replace(/(Error|error|fatal|CONFLICT|denied|not found|No such)/g, '<span class="hl-err">$&</span>')
+  s = s.replace(/\b(SELECT|FROM|WHERE|ORDER BY|LIMIT|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE|DATABASE|TABLE|USE|SHOW|DESC|ALTER|TRUNCATE|DROP|PRIMARY KEY|AUTO_INCREMENT|VARCHAR|INT|NOT NULL)\b/gi, '<span class="hl-sql">$&</span>')
+  s = s.replace(/\b(ERROR|Unknown|Duplicate|syntax|No database selected|not supported)\b/gi, '<span class="hl-err">$&</span>')
+  s = s.replace(/\b(Query OK|Database changed|Welcome|Empty set)\b/g, '<span class="hl-ok">$&</span>')
   return s
 }
 
@@ -254,26 +297,24 @@ function focusInput() {
 watch(() => props.suggestions, () => { focusInput() })
 
 onMounted(() => {
-  const welcome = [
-    '                _ _   ',
-    '               (_) |  ',
-    '     __ _  __ _ _| |_ ',
-    '    / _` |/ _` | | __|',
-    '   | (_| | (_| | | |_ ',
-    '    \\__, |\\__, |_|\\__|',
-    '     __/ | __/ |      ',
-    '    |___/ |___/       ',
-    '',
-    '欢迎使用 Git 模拟终端！这是一个在浏览器中模拟的 Git 仓库环境，',
-    '你可以输入真实的 git 命令，在内存仓库中完成各种操作。',
-    '',
-    '常用命令：git status / git add . / git commit -m "说明" / git log --oneline',
-    '输入 "help" 或 "git help" 查看全部命令，输入 "clear" 清屏。',
-    '',
-    '--------------------------------------------------------------',
-    ''
-  ]
-  history.value.push({ input: undefined, lines: welcome })
+  history.value.push({
+    input: undefined,
+    lines: [
+      ' __  __       ____   ___  _     ',
+      '|  \\/  |_   _/ ___| / _ \\| |    ',
+      "| |\\/| | | | \\___ \\| | | | |    ",
+      '| |  | | |_| |___) | |_| | |___ ',
+      '|_|  |_|\\__, |____/ \\__\\_\\_____|',
+      '        |___/                   ',
+      '',
+      '欢迎使用 MySQL 模拟终端。这里不会连接真实数据库，所有数据只保存在浏览器内。',
+      '常用命令：SHOW DATABASES; / CREATE DATABASE shop; / USE shop; / CREATE TABLE ...',
+      '输入 help 查看示例，输入 clear 清屏，Tab 补全，↑↓ 浏览历史。',
+      '',
+      '--------------------------------------------------------------',
+      ''
+    ]
+  })
   scrollToBottom()
 })
 </script>
@@ -282,9 +323,9 @@ onMounted(() => {
 .terminal-shell {
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #2c3542;
-  background: #1b222c;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border: 1px solid #21384a;
+  background: #152230;
+  box-shadow: 0 8px 24px rgba(0, 55, 80, 0.18);
   display: flex;
   flex-direction: column;
   font-family: 'SF Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
@@ -295,8 +336,8 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: #232c3a;
-  border-bottom: 1px solid #2e3949;
+  background: #1d3142;
+  border-bottom: 1px solid #28465d;
 }
 
 .dots {
@@ -315,7 +356,7 @@ onMounted(() => {
 .dot.green { background: #28c840; }
 
 .terminal-title {
-  color: #9fb3c8;
+  color: #a7c8d9;
   font-size: 12.5px;
   display: flex;
   align-items: center;
@@ -331,7 +372,7 @@ onMounted(() => {
 .icon-btn {
   background: transparent;
   border: none;
-  color: #7d8fa3;
+  color: #86a7b9;
   cursor: pointer;
   padding: 3px;
   border-radius: 5px;
@@ -350,7 +391,7 @@ onMounted(() => {
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.65;
-  color: #d6e2f0;
+  color: #d9ecf2;
   cursor: text;
 }
 
@@ -358,20 +399,21 @@ onMounted(() => {
   margin-bottom: 2px;
 }
 
-.term-prompt-line {
+.term-prompt-line,
+.term-input-line {
   display: flex;
   gap: 8px;
   margin-top: 6px;
 }
 
 .term-prompt {
-  color: #ffb648;
+  color: #49d2e5;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .term-input-text {
-  color: #e8eef7;
+  color: #f2fbff;
   word-break: break-all;
 }
 
@@ -394,34 +436,27 @@ onMounted(() => {
   color: #ff8080;
 }
 
-.term-input-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .term-input {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  color: #e8eef7;
+  color: #f2fbff;
   font-family: inherit;
   font-size: 13px;
-  caret-color: #ffb648;
+  caret-color: #49d2e5;
   min-width: 0;
 }
 
 .term-input::placeholder {
-  color: #5a6b80;
+  color: #637e91;
 }
 
 .term-cursor {
   display: inline-block;
   width: 8px;
   height: 15px;
-  background: #ffb648;
+  background: #49d2e5;
   animation: blink 1s steps(1) infinite;
 }
 
@@ -434,22 +469,41 @@ onMounted(() => {
   50% { opacity: 0; }
 }
 
-.hl-cmd { color: #7db9ff; }
-.hl-err { color: #ff8a8a; font-weight: 600; }
-.hl-hash { color: #c7a6ff; }
-
 .typing-line {
-  color: #8fa5bd;
+  color: #86a7b9;
+}
+
+.smart-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 10px;
+}
+
+.smart-chip {
+  background: rgba(73, 210, 229, 0.08);
+  border: 1px solid rgba(73, 210, 229, 0.22);
+  color: #96eaf4;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.smart-chip:hover {
+  background: rgba(73, 210, 229, 0.18);
+  color: #fff;
 }
 
 .term-suggest {
   padding: 10px 14px;
-  background: #202935;
-  border-top: 1px solid #2e3949;
+  background: #1a2b3b;
+  border-top: 1px solid #28465d;
 }
 
 .suggest-label {
-  color: #7d8fa3;
+  color: #86a7b9;
   font-size: 12px;
   margin-bottom: 8px;
 }
@@ -461,9 +515,9 @@ onMounted(() => {
 }
 
 .chip {
-  background: rgba(240, 80, 50, 0.12);
-  border: 1px solid rgba(240, 80, 50, 0.35);
-  color: #ffab93;
+  background: rgba(0, 163, 196, 0.13);
+  border: 1px solid rgba(0, 163, 196, 0.38);
+  color: #9eeaf6;
   font-size: 12px;
   font-family: inherit;
   padding: 4px 12px;
@@ -473,14 +527,18 @@ onMounted(() => {
 }
 
 .chip:hover {
-  background: rgba(240, 80, 50, 0.28);
+  background: rgba(0, 163, 196, 0.28);
   color: #fff;
-  border-color: #f05032;
+  border-color: #00a3c4;
 }
+
+.hl-sql { color: #8fe5ff; font-weight: 700; }
+.hl-err { color: #ff8a8a; font-weight: 700; }
+.hl-ok { color: #91f2bc; }
 
 @media (max-width: 768px) {
   .terminal-output {
-    height: 300px;
+    height: 320px;
     font-size: 12px;
     padding: 12px;
   }
@@ -490,4 +548,3 @@ onMounted(() => {
   }
 }
 </style>
-

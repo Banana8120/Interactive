@@ -1,22 +1,22 @@
-<template>
+﻿<template>
   <div class="docker-drawer" :class="{ open: isOpen }">
     <!-- 展开/收起触发按钮（始终可见） -->
     <button class="docker-toggle" @click="toggle" :title="isOpen ? '收起拓扑视图' : '展开拓扑视图'">
-      <el-icon :size="18"><DataLine /></el-icon>
+      <n-icon :size="18"><DataLine /></n-icon>
       <span class="toggle-label">拓扑视图</span>
-      <el-icon v-if="isOpen" :size="14"><ArrowRight /></el-icon>
-      <el-icon v-else :size="14"><ArrowLeft /></el-icon>
+      <n-icon v-if="isOpen" :size="14"><ArrowRight /></n-icon>
+      <n-icon v-else :size="14"><ArrowLeft /></n-icon>
     </button>
 
     <!-- 抽屉面板 -->
     <div class="docker-drawer-card">
       <div class="docker-drawer-head">
         <div class="docker-drawer-title">
-          <el-icon><DataLine /></el-icon>
+          <n-icon><DataLine /></n-icon>
           <span>Docker 拓扑视图</span>
         </div>
         <button class="docker-close" @click="isOpen = false" title="收起">
-          <el-icon><ArrowRight /></el-icon>
+          <n-icon><ArrowRight /></n-icon>
         </button>
       </div>
 
@@ -162,7 +162,7 @@ function toggle() {
   color: var(--text-main);
 }
 
-.docker-drawer-title .el-icon {
+.docker-drawer-title .n-icon {
   color: #2496ed;
   font-size: 18px;
 }
@@ -221,3 +221,4 @@ function toggle() {
   }
 }
 </style>
+

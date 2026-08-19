@@ -1,12 +1,12 @@
-<template>
+﻿<template>
   <div v-if="lesson" class="lesson-page">
     <!-- 面包屑 -->
     <div class="lesson-crumb">
-      <el-breadcrumb separator="/">
-        <el-breadcrumb-item :to="{ path: '/' }">课程目录</el-breadcrumb-item>
-        <el-breadcrumb-item :to="{ path: `/chapter/${chapter.id}` }">{{ chapter.title }}</el-breadcrumb-item>
-        <el-breadcrumb-item>{{ lesson.title }}</el-breadcrumb-item>
-      </el-breadcrumb>
+      <n-breadcrumb separator="/">
+        <n-breadcrumb-item><router-link to="/">课程目录</router-link></n-breadcrumb-item>
+        <n-breadcrumb-item><router-link :to="`/chapter/${chapter.id}`">{{ chapter.title }}</router-link></n-breadcrumb-item>
+        <n-breadcrumb-item>{{ lesson.title }}</n-breadcrumb-item>
+      </n-breadcrumb>
     </div>
 
     <div class="lesson-layout">
@@ -14,29 +14,29 @@
       <div class="lesson-main">
         <div class="lesson-head">
           <div class="lesson-head-tags">
-            <el-tag size="small" round :style="{ background: chapter.color + '14', color: chapter.color, borderColor: chapter.color + '44' }" effect="plain">
+            <n-tag size="small" round :style="{ background: chapter.color + '14', color: chapter.color, borderColor: chapter.color + '44' }" :bordered="true">
               {{ chapter.index }} · {{ lesson.concept }}
-            </el-tag>
-            <el-tag v-if="store.isLessonCompleted(lesson.id)" type="success" size="small" effect="light" round>已学完</el-tag>
+            </n-tag>
+            <n-tag v-if="store.isLessonCompleted(lesson.id)" type="success" size="small" :bordered="false" round>已学完</n-tag>
           </div>
           <h1 class="lesson-title">{{ lesson.title }}</h1>
         </div>
 
         <!-- 正文内容 -->
-        <el-card shadow="never" class="content-card">
+        <n-card :bordered="true" class="content-card">
           <LessonContent :blocks="lesson.content" />
 
           <!-- 练习任务说明（有“当前练习”面板时交由面板展示） -->
-          <el-alert
+          <n-alert
             v-if="lesson.terminal && lesson.terminal.enabled && !lesson.practice"
             type="info"
             :closable="false"
             class="practice-alert"
           >
-            <template #title>
+            <template #header>
               <b>✍️ 动手练习</b>：{{ lesson.terminal.task }}
             </template>
-          </el-alert>
+          </n-alert>
 
           <!-- 测验 -->
           <QuizCard
@@ -44,30 +44,30 @@
             :questions="lesson.quiz"
             @answered="onQuizAnswered"
           />
-        </el-card>
+        </n-card>
 
         <!-- 完成按钮 + 前后导航 -->
         <div class="lesson-actions">
-          <el-button size="large" round @click="goPrev" :disabled="!prevLesson">
-            <el-icon><ArrowLeft /></el-icon>&nbsp;上一节
-          </el-button>
+          <n-button size="large" round @click="goPrev" :disabled="!prevLesson">
+            <n-icon><ArrowLeft /></n-icon>&nbsp;上一节
+          </n-button>
 
-          <el-button
+          <n-button
             v-if="!store.isLessonCompleted(lesson.id)"
             size="large"
             type="primary"
             round
             @click="markDone"
           >
-            <el-icon><CircleCheck /></el-icon>&nbsp;标记本节完成
-          </el-button>
-          <el-button v-else size="large" type="success" round disabled>
-            <el-icon><CircleCheckFilled /></el-icon>&nbsp;本节已完成
-          </el-button>
+            <n-icon><CircleCheck /></n-icon>&nbsp;标记本节完成
+          </n-button>
+          <n-button v-else size="large" type="success" round disabled>
+            <n-icon><CircleCheckFilled /></n-icon>&nbsp;本节已完成
+          </n-button>
 
-          <el-button size="large" round :disabled="!nextLesson" @click="goNext">
-            下一节&nbsp;<el-icon><ArrowRight /></el-icon>
-          </el-button>
+          <n-button size="large" round :disabled="!nextLesson" @click="goNext">
+            下一节&nbsp;<n-icon><ArrowRight /></n-icon>
+          </n-button>
         </div>
       </div>
 
@@ -88,9 +88,9 @@
         />
         <div class="terminal-widget">
           <div class="widget-head">
-            <el-icon><Monitor /></el-icon>
+            <n-icon><Monitor /></n-icon>
             <span>实操终端</span>
-            <el-tag size="small" type="success" effect="light" round class="live-tag">模拟环境</el-tag>
+            <n-tag size="small" type="success" :bordered="false" round class="live-tag">模拟环境</n-tag>
           </div>
           <SimulatedTerminal
             :key="'term-' + lesson.id"
@@ -100,7 +100,7 @@
             @reset-environment="onResetEnvironment"
           />
           <div class="terminal-foot">
-            <el-icon><InfoFilled /></el-icon>
+            <n-icon><InfoFilled /></n-icon>
             输入 <code>help</code> 查看所有支持的命令 · 支持 ↑↓ 历史记录 · Tab 自动补全
           </div>
         </div>
@@ -115,7 +115,7 @@
 <script setup lang="ts">
 import { computed, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { message, confirmDialog } from '@/utils/feedback'
 import { chapters } from '@/data/lessons'
 import { useProgressStore } from '@/stores/progress'
 import {
@@ -185,7 +185,7 @@ watch(
 function markDone() {
   if (!lesson.value) return
   store.completeLesson(lesson.value.id, lesson.value.chapterId)
-  ElMessage.success('本节已标记完成，进度已保存 🎉')
+  message.success('本节已标记完成，进度已保存 🎉')
 }
 
 function goPrev() {
@@ -210,13 +210,13 @@ function onCommand({ ok, errorStreak: streak }: { ok: boolean; errorStreak: numb
 function onPracticeComplete() {
   if (!lesson.value) return
   store.completeLesson(lesson.value.id, lesson.value.chapterId)
-  ElMessage.success('本节已标记完成，进度已保存 🎉')
+  message.success('本节已标记完成，进度已保存 🎉')
 }
 
 function onPracticeAutoDone() {
   if (!lesson.value || store.isLessonCompleted(lesson.value.id)) return
   store.completeLesson(lesson.value.id, lesson.value.chapterId)
-  ElMessage.success('练习已完成，本节自动标记为完成 🎉')
+  message.success('练习已完成，本节自动标记为完成 🎉')
 }
 
 function onHintUsed(level: number) {
@@ -233,7 +233,7 @@ function onSnapshotSynced({ env, events, syncSeq }: SnapshotPayload) {
 
 function onResetEnvironment() {
   if (!lesson.value) return
-  ElMessageBox.confirm(
+  confirmDialog(
     '重置将清空本课时的 Docker 模拟环境（容器、卷、网络）并删除本地缓存，确定继续吗？',
     '重置 Docker 环境',
     { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
@@ -243,7 +243,7 @@ function onResetEnvironment() {
       resetEnvironment()
       dockerEvents.value = []
       // SimulatedTerminal 会重新挂载并触发 snapshot-synced，父组件据此刷新
-      ElMessage.success('Docker 环境已重置')
+      message.success('Docker 环境已重置')
     })
     .catch(() => {})
 }
@@ -294,7 +294,7 @@ function onResetEnvironment() {
   border: 1px solid var(--border-light);
 }
 
-.content-card :deep(.el-card__body) {
+.content-card :deep(.n-card__content) {
   padding: 22px 26px;
 }
 
@@ -337,7 +337,7 @@ function onResetEnvironment() {
   color: var(--text-main);
 }
 
-.widget-head .el-icon {
+.widget-head .n-icon {
   color: #2496ed;
   font-size: 17px;
 }
@@ -357,7 +357,7 @@ function onResetEnvironment() {
   color: #909399;
 }
 
-.terminal-foot .el-icon {
+.terminal-foot .n-icon {
   color: #2496ed;
 }
 
@@ -388,17 +388,20 @@ function onResetEnvironment() {
     font-size: 20px;
   }
 
-  .content-card :deep(.el-card__body) {
+  .content-card :deep(.n-card__content) {
     padding: 16px 16px;
   }
 
-  .lesson-actions :deep(.el-button) {
+  .lesson-actions :deep(.n-button) {
     flex: 1;
     margin: 0 !important;
   }
 
-  .lesson-actions :deep(.el-button) span {
+  .lesson-actions :deep(.n-button) span {
     font-size: 13px;
   }
 }
 </style>
+
+
+

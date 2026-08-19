@@ -42,7 +42,9 @@ function createState() {
     stash: [],                           // [{ msg, staged, workdir }]
     reflog: [],                          // 头部移动日志
     mergeState: null,                    // 合并中状态（简化）
-    cherryPickState: null
+    cherryPickState: null,
+    worktrees: [],                       // 额外 worktree：[{ path, branch, hash }]
+    bisectState: null                    // 二分定位状态（教学模拟）
   }
 }
 
@@ -380,6 +382,14 @@ function runGit(args) {
   if (sub === 'mv') return gitMv(rest)
   if (sub === 'show') return gitShow(rest)
   if (sub === 'clone') return gitClone(rest)
+  if (sub === 'grep') return gitGrep(rest)
+  if (sub === 'blame') return gitBlame(rest)
+  if (sub === 'shortlog') return gitShortlog(rest)
+  if (sub === 'archive') return gitArchive(rest)
+  if (sub === 'worktree') return gitWorktree(rest)
+  if (sub === 'bisect') return gitBisect(rest)
+  if (sub === 'gc') return gitGc(rest)
+  if (sub === 'fsck') return gitFsck(rest)
 
   // 拼写纠错
   const fix = suggestFix(sub)
@@ -392,7 +402,7 @@ function runGit(args) {
   return { type: 'error', lines: [`git: '${sub}' is not a git command. See 'git --help'.`, '输入 "git help" 查看支持的命令列表。'] }
 }
 
-const KNOWN_SUBS = ['init', 'config', 'status', 'add', 'commit', 'log', 'diff', 'branch', 'checkout', 'switch', 'merge', 'rebase', 'remote', 'fetch', 'push', 'pull', 'tag', 'stash', 'reset', 'restore', 'revert', 'cherry-pick', 'reflog', 'rm', 'mv', 'show', 'clean', 'clone', 'help', 'version']
+const KNOWN_SUBS = ['init', 'config', 'status', 'add', 'commit', 'log', 'diff', 'branch', 'checkout', 'switch', 'merge', 'rebase', 'remote', 'fetch', 'push', 'pull', 'tag', 'stash', 'reset', 'restore', 'revert', 'cherry-pick', 'reflog', 'rm', 'mv', 'show', 'clean', 'clone', 'grep', 'blame', 'shortlog', 'archive', 'worktree', 'bisect', 'gc', 'fsck', 'help', 'version']
 
 function suggestFix(sub) {
   for (const k of KNOWN_SUBS) {
@@ -403,7 +413,8 @@ function suggestFix(sub) {
     ad: 'add', addd: 'add', brnach: 'branch', branh: 'branch', checkot: 'checkout',
     chckout: 'checkout', merget: 'merge', marge: 'merge', pulll: 'pull', puch: 'push',
     tagg: 'tag', logg: 'log', stah: 'stash', resset: 'reset', rest: 'reset', branc: 'branch',
-    restor: 'restore', fetchh: 'fetch', rebbase: 'rebase'
+    restor: 'restore', fetchh: 'fetch', rebbase: 'rebase', greep: 'grep', blam: 'blame',
+    worktre: 'worktree', bisct: 'bisect', arvhive: 'archive', fsk: 'fsck'
   }
   return map[sub] || null
 }
@@ -1579,6 +1590,217 @@ function gitShow(args) {
   }
 }
 
+function gitGrep(args) {
+  const req = requireInit()
+  if (req) return req
+  const numbered = args.includes('-n') || args.includes('--line-number')
+  const fixed = args.includes('-F') || args.includes('--fixed-strings')
+  const pattern = args.find((a) => !a.startsWith('-'))
+  if (!pattern) return { type: 'error', lines: ['用法: git grep [-n] <pattern>', '示例: git grep -n hello'] }
+  const needle = pattern.replace(/^["']|["']$/g, '')
+  const lines = []
+  const matcher = fixed
+    ? (text) => text.includes(needle)
+    : (text) => {
+        try { return new RegExp(needle, 'i').test(text) } catch (e) { return text.toLowerCase().includes(needle.toLowerCase()) }
+      }
+  for (const [file, content] of Object.entries(state.workdir)) {
+    String(content || '').split('\n').forEach((line, i) => {
+      if (matcher(line)) lines.push(numbered ? `${file}:${i + 1}:${line}` : `${file}:${line}`)
+    })
+  }
+  return { type: 'output', lines: lines.length ? lines : [`（没有找到匹配：${needle}）`] }
+}
+
+function gitBlame(args) {
+  const req = requireInit()
+  if (req) return req
+  const file = args.filter((a) => !a.startsWith('-')).pop()
+  if (!file) return { type: 'error', lines: ['用法: git blame <file>'] }
+  const content = state.workdir[file] ?? headTree()[file]
+  if (content === undefined) return { type: 'error', lines: [`fatal: no such path '${file}' in HEAD`] }
+  const head = headCommit()
+  const hash = head?.hash || '0000000'
+  const author = head?.author || state.config.user.name || 'learner'
+  const date = head?.date || nowText()
+  const lines = String(content).replace(/\n$/, '').split('\n')
+  return {
+    type: 'output',
+    lines: lines.map((line, i) => `${hash.slice(0, 7)} (${author.padEnd(10, ' ')} ${date} ${String(i + 1).padStart(3, ' ')}) ${line}`)
+  }
+}
+
+function gitShortlog(args) {
+  const req = requireInit()
+  if (req) return req
+  const summary = args.includes('-s') || args.includes('--summary')
+  const numbered = args.includes('-n') || args.includes('--numbered')
+  const groups = {}
+  for (const c of Object.values(state.commits)) {
+    const key = c.author || 'learner'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(c)
+  }
+  let authors = Object.entries(groups)
+  if (numbered) authors = authors.sort((a, b) => b[1].length - a[1].length)
+  const lines = []
+  for (const [author, commits] of authors) {
+    if (summary) {
+      lines.push(`${String(commits.length).padStart(6, ' ')}\t${author}`)
+    } else {
+      lines.push(`${author} (${commits.length}):`)
+      for (const c of commits) lines.push(`      ${c.msg}`)
+      lines.push('')
+    }
+  }
+  return { type: 'output', lines: lines.length ? lines : ['（暂无提交）'] }
+}
+
+function gitArchive(args) {
+  const req = requireInit()
+  if (req) return req
+  const outputIdx = args.findIndex((a) => a === '-o' || a === '--output')
+  const output = outputIdx !== -1 ? args[outputIdx + 1] : (args.find((a) => a.startsWith('--output=')) || '').replace(/^--output=/, '')
+  const ref = args.find((a, i) => !a.startsWith('-') && i !== outputIdx + 1) || 'HEAD'
+  const hash = resolveRef(ref)
+  if (!hash) return { type: 'error', lines: [`fatal: not a valid object name: ${ref}`] }
+  const tree = parentTreeOf(hash)
+  const fileCount = Object.keys(tree).length
+  return {
+    type: 'output',
+    lines: [
+      output
+        ? `已创建归档 ${output}（模拟）：${fileCount} 个文件来自 ${hash.slice(0, 7)}`
+        : `（模拟 tar 输出）${fileCount} 个文件来自 ${hash.slice(0, 7)}`,
+      '提示：真实 Git 中 git archive 常用于导出某个提交的源码快照，不包含 .git 历史。'
+    ]
+  }
+}
+
+function gitWorktree(args) {
+  const req = requireInit()
+  if (req) return req
+  if (!state.worktrees) state.worktrees = []
+  const sub = args[0] || 'list'
+  if (sub === 'list') {
+    const head = headCommit()?.hash || '(no commits)'
+    const lines = [`/home/learner/git-project  ${String(head).slice(0, 7)} [${state.head}]`]
+    for (const wt of state.worktrees) {
+      lines.push(`${wt.path}  ${String(wt.hash || '(no commits)').slice(0, 7)} [${wt.branch}]`)
+    }
+    return { type: 'output', lines }
+  }
+  if (sub === 'add') {
+    const create = args[1] === '-b'
+    const path = create ? args[3] : args[1]
+    const branch = create ? args[2] : args[2]
+    if (!path) return { type: 'error', lines: ['用法: git worktree add [-b <new-branch>] <path> [<branch>]'] }
+    const branchName = branch || path.replace(/^.*[\\/]/, '').replace(/[^a-zA-Z0-9_.-]/g, '-') || `worktree-${state.worktrees.length + 1}`
+    if (create) {
+      if (branchExists(branchName)) return { type: 'error', lines: [`fatal: a branch named '${branchName}' already exists`] }
+      state.branches[branchName] = headCommit()?.hash || null
+    } else if (!branchExists(branchName)) {
+      state.branches[branchName] = headCommit()?.hash || null
+    }
+    if (state.worktrees.some((w) => w.path === path)) return { type: 'error', lines: [`fatal: '${path}' is already a working tree`] }
+    state.worktrees.push({ path, branch: branchName, hash: state.branches[branchName] })
+    return { type: 'output', lines: [`Preparing worktree (checking out '${branchName}')`, `HEAD is now at ${(state.branches[branchName] || '0000000').slice(0, 7)} ${headCommit()?.msg || ''}`] }
+  }
+  if (sub === 'remove') {
+    const path = args[1]
+    if (!path) return { type: 'error', lines: ['用法: git worktree remove <path>'] }
+    const idx = state.worktrees.findIndex((w) => w.path === path)
+    if (idx === -1) return { type: 'error', lines: [`fatal: '${path}' is not a working tree`] }
+    state.worktrees.splice(idx, 1)
+    return { type: 'output', lines: [`已移除 worktree: ${path}`] }
+  }
+  if (sub === 'prune') {
+    return { type: 'output', lines: ['（没有需要清理的失效 worktree 记录）'] }
+  }
+  return { type: 'error', lines: ['用法: git worktree list | add [-b <branch>] <path> [<branch>] | remove <path> | prune'] }
+}
+
+function commitChainFrom(hash) {
+  const chain = []
+  let cur = hash
+  while (cur) {
+    chain.unshift(cur)
+    cur = state.commits[cur]?.parent || null
+  }
+  return chain
+}
+
+function bisectCandidate(bisect) {
+  const bad = bisect.bad || headCommit()?.hash
+  const chain = commitChainFrom(bad)
+  if (!chain.length) return null
+  const goodIdx = bisect.good ? chain.indexOf(bisect.good) : -1
+  const badIdx = bisect.bad ? chain.indexOf(bisect.bad) : chain.length - 1
+  const lo = goodIdx + 1
+  const hi = badIdx === -1 ? chain.length - 1 : badIdx
+  if (hi < lo) return null
+  return chain[Math.floor((lo + hi) / 2)]
+}
+
+function gitBisect(args) {
+  const req = requireInit()
+  if (req) return req
+  const sub = args[0]
+  if (!sub || sub === 'help') return { type: 'output', lines: ['用法: git bisect start | good [ref] | bad [ref] | reset | log'] }
+  if (sub === 'start') {
+    const head = headCommit()
+    if (!head) return { type: 'error', lines: ['fatal: bad HEAD - I need a HEAD'] }
+    state.bisectState = { active: true, good: null, bad: head.hash, current: head.hash, log: ['git bisect start'] }
+    return { type: 'output', lines: ['status: waiting for both good and bad commits', `提示：当前 HEAD 默认作为 bad，可运行 git bisect good <较早提交>。`] }
+  }
+  if (sub === 'reset') {
+    state.bisectState = null
+    return { type: 'output', lines: ['Previous HEAD position was restored. Bisect reset.'] }
+  }
+  if (sub === 'log') {
+    return { type: 'output', lines: state.bisectState?.log?.length ? state.bisectState.log : ['（尚未开始 bisect）'] }
+  }
+  if (sub === 'good' || sub === 'bad') {
+    if (!state.bisectState) state.bisectState = { active: true, good: null, bad: null, current: null, log: ['git bisect start'] }
+    const ref = args[1] || state.bisectState.current || 'HEAD'
+    const hash = resolveRef(ref)
+    if (!hash) return { type: 'error', lines: [`fatal: Needed a single revision: ${ref}`] }
+    state.bisectState[sub] = hash
+    state.bisectState.log.push(`git bisect ${sub} ${hash.slice(0, 7)}`)
+    const candidate = bisectCandidate(state.bisectState)
+    state.bisectState.current = candidate
+    if (!candidate || candidate === state.bisectState.good || candidate === state.bisectState.bad) {
+      return { type: 'output', lines: [`${(state.bisectState.bad || hash).slice(0, 7)} is the first bad commit（模拟结果）`] }
+    }
+    return { type: 'output', lines: [`Bisecting: next commit to test is ${candidate.slice(0, 7)}`, '提示：在真实项目中运行测试，然后标记 git bisect good 或 git bisect bad。'] }
+  }
+  return { type: 'error', lines: ['用法: git bisect start | good [ref] | bad [ref] | reset | log'] }
+}
+
+function gitGc() {
+  const req = requireInit()
+  if (req) return req
+  const objects = repoObjectCount(Object.keys(headTree()).length, Object.keys(state.commits).length)
+  return { type: 'output', lines: [
+    'Enumerating objects: ' + objects + ', done.',
+    'Counting objects: 100% (' + objects + '/' + objects + '), done.',
+    'Delta compression using up to 8 threads',
+    'Compressing objects: 100% (' + Math.max(1, objects - 2) + '/' + Math.max(1, objects - 2) + '), done.',
+    'Writing objects: 100% (' + objects + '/' + objects + '), done.',
+    '✅ 垃圾回收完成（模拟）：仓库对象已打包优化。'
+  ], delay: 400 }
+}
+
+function gitFsck() {
+  const req = requireInit()
+  if (req) return req
+  const missingParents = Object.values(state.commits).filter((c) => c.parent && !state.commits[c.parent])
+  if (missingParents.length) {
+    return { type: 'error', lines: missingParents.map((c) => `broken link from commit ${c.hash} to parent ${c.parent}`) }
+  }
+  return { type: 'output', lines: ['Checking object directories: 100% (256/256), done.', 'Checking objects: 100% (' + Object.keys(state.commits).length + '/' + Object.keys(state.commits).length + '), done.', '✅ fsck 未发现仓库对象损坏。'] }
+}
+
 function gitHelp() {
   return {
     type: 'output',
@@ -1595,6 +1817,11 @@ function gitHelp() {
       '  git stash / git stash list / git stash pop   暂存修改',
       '  git reset [--hard] <commit> / git restore [--staged] <file> / git revert <commit>   撤销与恢复',
       '  git clean [-n|-f]   清理未跟踪文件',
+      '  git grep [-n] <pattern> / git blame <file>   搜索与追踪代码来源',
+      '  git shortlog [-s -n] / git archive -o <file> <ref>   历史摘要与源码归档',
+      '  git worktree list/add/remove   多工作区管理',
+      '  git bisect start/good/bad/reset/log   二分定位问题提交',
+      '  git gc / git fsck   仓库维护与对象检查',
       '  git cherry-pick <commit> / git reflog   进阶技巧',
       '  git rm <file> / git mv <旧> <新> / git show <commit>   文件操作',
       '',

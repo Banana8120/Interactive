@@ -1,22 +1,22 @@
-<template>
+﻿<template>
   <div class="state-drawer" :class="{ open: isOpen }">
     <!-- 展开/收起触发按钮（始终可见） -->
     <button class="state-toggle" @click="toggle" :title="isOpen ? '收起仓库状态' : '展开仓库状态'">
-      <el-icon :size="18"><View /></el-icon>
+      <n-icon :size="18"><View /></n-icon>
       <span class="toggle-label">仓库状态</span>
-      <el-icon v-if="isOpen" :size="14"><ArrowRight /></el-icon>
-      <el-icon v-else :size="14"><ArrowLeft /></el-icon>
+      <n-icon v-if="isOpen" :size="14"><ArrowRight /></n-icon>
+      <n-icon v-else :size="14"><ArrowLeft /></n-icon>
     </button>
 
     <!-- 面板内容 -->
     <div class="state-drawer-card">
       <div class="state-drawer-head">
         <div class="state-drawer-title">
-          <el-icon><View /></el-icon>
+          <n-icon><View /></n-icon>
           <span>仓库状态</span>
         </div>
         <button class="state-close" @click="isOpen = false" title="收起">
-          <el-icon><ArrowRight /></el-icon>
+          <n-icon><ArrowRight /></n-icon>
         </button>
       </div>
 
@@ -24,7 +24,7 @@
         <!-- 用户与 HEAD -->
         <div class="state-section">
           <div class="state-section-title">
-            <el-icon><User /></el-icon>
+            <n-icon><User /></n-icon>
             <span>用户与 HEAD</span>
           </div>
           <div class="state-grid two">
@@ -39,10 +39,10 @@
             <div class="state-item">
               <span class="state-label">当前分支</span>
               <span class="state-value branch">
-                <el-tag size="small" effect="light" :type="env.detached ? 'info' : 'danger'" round>
-                  <el-icon><Connection /></el-icon>
+                <n-tag size="small" :bordered="false" :type="env.detached ? 'info' : 'error'" round>
+                  <n-icon><Connection /></n-icon>
                   {{ headText }}
-                </el-tag>
+                </n-tag>
               </span>
             </div>
             <div class="state-item">
@@ -55,7 +55,7 @@
         <!-- 三区域状态 -->
         <div class="state-section">
           <div class="state-section-title">
-            <el-icon><Sort /></el-icon>
+            <n-icon><Sort /></n-icon>
             <span>工作区 / 暂存区 / 版本库</span>
           </div>
           <div class="areas-flow">
@@ -63,23 +63,23 @@
               <div class="area-title">工作区 Working Directory</div>
               <div class="area-body">
                 <div v-if="workingFiles.length" class="area-files">
-                  <el-tag
+                  <n-tag
                     v-for="f in workingFiles"
                     :key="'wd-' + f.path"
                     size="small"
-                    effect="light"
+                    :bordered="false"
                     class="area-tag"
-                    :type="f.status === 'untracked' ? 'info' : f.status === 'deleted' ? 'danger' : 'warning'"
+                    :type="f.status === 'untracked' ? 'info' : f.status === 'deleted' ? 'error' : 'warning'"
                   >
                     {{ f.path }}
-                  </el-tag>
+                  </n-tag>
                 </div>
                 <div v-else class="area-empty">工作区无改动</div>
               </div>
             </div>
 
             <div class="area-arrow">
-              <el-icon><ArrowRight /></el-icon>
+              <n-icon><ArrowRight /></n-icon>
               <span>git add</span>
             </div>
 
@@ -87,23 +87,23 @@
               <div class="area-title">暂存区 Staging Area</div>
               <div class="area-body">
                 <div v-if="stagedFiles.length" class="area-files">
-                  <el-tag
+                  <n-tag
                     v-for="f in stagedFiles"
                     :key="'st-' + f.path"
                     size="small"
-                    effect="light"
-                    :type="f.status === 'new' ? 'success' : f.status === 'deleted' ? 'danger' : 'warning'"
+                    :bordered="false"
+                    :type="f.status === 'new' ? 'success' : f.status === 'deleted' ? 'error' : 'warning'"
                     class="area-tag"
                   >
                     {{ f.path }}
-                  </el-tag>
+                  </n-tag>
                 </div>
                 <div v-else class="area-empty">暂存区为空</div>
               </div>
             </div>
 
             <div class="area-arrow">
-              <el-icon><ArrowRight /></el-icon>
+              <n-icon><ArrowRight /></n-icon>
               <span>git commit</span>
             </div>
 
@@ -123,7 +123,7 @@
         <!-- 分支 -->
         <div class="state-section">
           <div class="state-section-title">
-            <el-icon><Share /></el-icon>
+            <n-icon><Share /></n-icon>
             <span>本地分支</span>
           </div>
           <div class="branch-list">
@@ -133,7 +133,7 @@
               class="branch-chip"
               :class="{ active: b.active }"
             >
-              <el-icon v-if="b.active"><Flag /></el-icon>
+              <n-icon v-if="b.active"><Flag /></n-icon>
               <span>{{ b.name }}</span>
               <span v-if="b.hash" class="branch-hash">@{{ b.hash }}</span>
             </div>
@@ -143,7 +143,7 @@
         <!-- 提交历史 -->
         <div class="state-section">
           <div class="state-section-title">
-            <el-icon><Timer /></el-icon>
+            <n-icon><Timer /></n-icon>
             <span>最近提交</span>
           </div>
           <div class="commit-list">
@@ -164,7 +164,7 @@
         <div class="state-grid two state-section">
           <div class="state-section no-border">
             <div class="state-section-title">
-              <el-icon><Link /></el-icon>
+              <n-icon><Link /></n-icon>
               <span>远程仓库</span>
             </div>
             <div v-if="remoteList.length" class="remote-list">
@@ -172,7 +172,7 @@
                 <div class="remote-name">{{ r.name }}</div>
                 <div class="remote-url">{{ r.url }}</div>
                 <div v-if="r.branches.length" class="remote-branches">
-                  <el-tag v-for="br in r.branches" :key="br" size="small" effect="plain" type="info">{{ br }}</el-tag>
+                  <n-tag v-for="br in r.branches" :key="br" size="small" :bordered="true" type="info">{{ br }}</n-tag>
                 </div>
               </div>
             </div>
@@ -181,7 +181,7 @@
 
           <div class="state-section no-border">
             <div class="state-section-title">
-              <el-icon><Box /></el-icon>
+              <n-icon><Box /></n-icon>
               <span>Stash</span>
             </div>
             <div v-if="env.stash.length" class="stash-list">
@@ -197,11 +197,11 @@
         <!-- 标签 -->
         <div v-if="tagList.length" class="state-section">
           <div class="state-section-title">
-            <el-icon><PriceTag /></el-icon>
+            <n-icon><PriceTag /></n-icon>
             <span>标签</span>
           </div>
           <div class="tag-list">
-            <el-tag v-for="t in tagList" :key="t.name" size="small" effect="light" type="warning" round>{{ t.name }}</el-tag>
+            <n-tag v-for="t in tagList" :key="t.name" size="small" :bordered="false" type="warning" round>{{ t.name }}</n-tag>
           </div>
         </div>
       </div>
@@ -422,7 +422,7 @@ const tagList = computed(() => {
   color: var(--text-main);
 }
 
-.state-drawer-title .el-icon {
+.state-drawer-title .n-icon {
   color: #f05032;
   font-size: 18px;
 }
@@ -486,7 +486,7 @@ const tagList = computed(() => {
   margin-bottom: 10px;
 }
 
-.state-section-title .el-icon {
+.state-section-title .n-icon {
   color: #f05032;
 }
 
@@ -525,7 +525,7 @@ const tagList = computed(() => {
   font-weight: 500;
 }
 
-.branch .el-tag {
+.branch .n-tag {
   font-weight: 600;
 }
 
@@ -592,7 +592,7 @@ const tagList = computed(() => {
   font-size: 11px;
 }
 
-.area-arrow .el-icon {
+.area-arrow .n-icon {
   font-size: 14px;
 }
 
@@ -799,3 +799,5 @@ const tagList = computed(() => {
   }
 }
 </style>
+
+

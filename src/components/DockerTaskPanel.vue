@@ -1,17 +1,17 @@
-<template>
+﻿<template>
   <div class="task-panel">
     <!-- 任务头部 -->
     <div class="task-head">
       <div class="task-title">
-        <el-icon :size="16"><Goal /></el-icon>
+        <n-icon :size="16"><Goal /></n-icon>
         <span>当前练习</span>
       </div>
-      <el-tag
+      <n-tag
         size="small"
         :type="done ? 'success' : 'warning'"
-        effect="light"
+        :bordered="false"
         round
-      >{{ done ? '已完成' : '进行中' }}</el-tag>
+      >{{ done ? '已完成' : '进行中' }}</n-tag>
     </div>
 
     <!-- 任务描述 -->
@@ -21,43 +21,43 @@
 
       <!-- 完成提示 -->
       <transition name="fade">
-        <el-alert
+        <n-alert
           v-if="done"
           type="success"
           :closable="false"
           class="task-success"
         >
-          <template #title>{{ practice.successMsg || '练习完成！' }}</template>
-        </el-alert>
+          <template #header>{{ practice.successMsg || '练习完成！' }}</template>
+        </n-alert>
       </transition>
 
       <!-- 卡住自动提示 -->
       <transition name="fade">
-        <el-alert
+        <n-alert
           v-if="stuckHint"
           type="info"
           :closable="false"
           class="task-stuck"
         >
-          <template #title>
+          <template #header>
             <b>💡 卡住了？试试：</b>{{ stuckHint }}
           </template>
-        </el-alert>
+        </n-alert>
       </transition>
 
       <!-- 分级提示 -->
       <div class="hint-area" v-if="practice.hints && practice.hints.length">
-        <el-button
+        <n-button
           size="small"
           round
-          plain
+          secondary
           :type="revealed >= practice.hints.length ? 'success' : 'primary'"
           @click="nextHint"
           :disabled="done"
         >
-          <el-icon><MagicStick /></el-icon>&nbsp;
+          <n-icon><MagicStick /></n-icon>&nbsp;
           {{ revealed === 0 ? '查看提示' : revealed >= practice.hints.length ? '提示已全部展示' : `再看一条提示（${revealed}/${practice.hints.length}）` }}
-        </el-button>
+        </n-button>
         <transition-group name="hint-list" tag="div" class="hint-list">
           <div v-for="(h, i) in practice.hints.slice(0, revealed)" :key="i" class="hint-item">
             <span class="hint-num">{{ i + 1 }}</span>
@@ -69,15 +69,15 @@
 
     <!-- 底部操作 -->
     <div class="task-foot">
-      <el-button
+      <n-button
         size="small"
         round
         :type="done ? 'success' : 'primary'"
         :disabled="done"
         @click="markDone"
       >
-        <el-icon><CircleCheck /></el-icon>&nbsp;{{ done ? '已完成' : '标记本节完成' }}
-      </el-button>
+        <n-icon><CircleCheck /></n-icon>&nbsp;{{ done ? '已完成' : '标记本节完成' }}
+      </n-button>
       <span class="task-foot-tip" v-if="!done">在终端完成操作后自动检测</span>
       <span class="task-foot-tip" v-else>干得漂亮！🎉</span>
     </div>
@@ -86,7 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { message } from '@/utils/feedback'
 import { getEnvironment } from '@/terminal/simulator'
 import type { Practice } from '@/types'
 
@@ -140,9 +140,9 @@ function nextHint() {
 function markDone() {
   if (doneNow.value || props.done) {
     emit('complete')
-    ElMessage.success('本节已标记完成，进度已保存 🎉')
+    message.success('本节已标记完成，进度已保存 🎉')
   } else {
-    ElMessage.info('任务还未完成，再试试看？或点击“查看提示”获取线索。')
+    message.info('任务还未完成，再试试看？或点击“查看提示”获取线索。')
   }
 }
 
@@ -217,7 +217,7 @@ watch(() => props.checkTick, () => {
   border-radius: 8px;
 }
 
-.task-stuck :deep(.el-alert__title) {
+.task-stuck :deep(.n-alert-body__title) {
   font-size: 12.5px;
   line-height: 1.6;
 }
@@ -299,3 +299,6 @@ watch(() => props.checkTick, () => {
   opacity: 0;
 }
 </style>
+
+
+

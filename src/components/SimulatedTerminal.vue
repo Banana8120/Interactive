@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div class="terminal-host">
         <div class="terminal-wrap">
             <div class="terminal-shell">
@@ -10,20 +10,26 @@
                         <span class="dot green"></span>
                     </div>
                     <span class="terminal-title">
-                        <el-icon><Monitor /></el-icon>
+                        <n-icon><Monitor /></n-icon>
                         docker 模拟终端
                     </span>
                     <div class="terminal-actions">
-                        <el-tooltip content="清空屏幕" placement="bottom">
-                            <button class="icon-btn" @click="clearScreen">
-                                <el-icon><Delete /></el-icon>
-                            </button>
-                        </el-tooltip>
-                        <el-tooltip content="重置环境" placement="bottom">
-                            <button class="icon-btn" @click="resetEnv">
-                                <el-icon><Refresh /></el-icon>
-                            </button>
-                        </el-tooltip>
+                        <n-tooltip placement="bottom">
+                            <template #trigger>
+                                <button class="icon-btn" @click="clearScreen">
+                                    <n-icon><Delete /></n-icon>
+                                </button>
+                            </template>
+                            清空屏幕
+                        </n-tooltip>
+                        <n-tooltip placement="bottom">
+                            <template #trigger>
+                                <button class="icon-btn" @click="resetEnv">
+                                    <n-icon><Refresh /></n-icon>
+                                </button>
+                            </template>
+                            重置环境
+                        </n-tooltip>
                     </div>
                 </div>
 
@@ -88,7 +94,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { message, confirmDialog } from '@/utils/feedback'
 import { executeCommand, getEnvironment } from '@/terminal/simulator'
 import type { DockerEnv } from '@/types'
 
@@ -255,15 +261,32 @@ function autocomplete() {
     const candidates = [
         'docker images',
         'docker ps -a',
+        'docker create --name ',
         'docker pull ',
         'docker run -d -p 8080:80 nginx',
         'docker stop ',
+        'docker kill ',
+        'docker pause ',
+        'docker unpause ',
         'docker rm ',
         'docker logs ',
         'docker exec -it ',
+        'docker cp ',
+        'docker top ',
+        'docker diff ',
+        'docker rename ',
+        'docker commit ',
+        'docker container ls -a',
+        'docker container prune',
         'docker volume ls',
+        'docker volume prune',
         'docker network ls',
         'docker build -t myapp .',
+        'docker history ',
+        'docker save -o myapp.tar ',
+        'docker load -i myapp.tar',
+        'docker system df',
+        'docker system prune',
         'docker compose up -d',
         'docker info',
         'docker search ',
@@ -629,3 +652,5 @@ onBeforeUnmount(() => {
     }
 }
 </style>
+
+

@@ -1,20 +1,18 @@
-﻿<template>
-  <div v-if="lesson" class="git-lesson-page">
-    <!-- 面包屑 -->
+<template>
+  <div v-if="lesson && chapter" class="mysql-lesson-page">
     <div class="lesson-crumb">
       <n-breadcrumb separator="/">
         <n-breadcrumb-item>
-          <router-link to="/git">Git 学习</router-link>
+          <router-link to="/mysql">MySQL 学习</router-link>
         </n-breadcrumb-item>
         <n-breadcrumb-item>
-          <router-link :to="{ path: '/git', query: { ch: chapter.id } }">{{ chapter.title }}</router-link>
+          <router-link :to="{ path: '/mysql', query: { ch: chapter.id } }">{{ chapter.title }}</router-link>
         </n-breadcrumb-item>
         <n-breadcrumb-item>{{ lesson.title }}</n-breadcrumb-item>
       </n-breadcrumb>
     </div>
 
     <div class="lesson-layout">
-      <!-- 左栏：教学内容 -->
       <div class="lesson-main">
         <div class="lesson-head">
           <div class="lesson-head-tags">
@@ -26,11 +24,9 @@
           <h1 class="lesson-title">{{ lesson.title }}</h1>
         </div>
 
-        <!-- 正文内容 -->
         <n-card :bordered="true" class="content-card">
           <LessonContent :blocks="lesson.content" />
 
-          <!-- 练习任务说明 -->
           <n-alert
             v-if="lesson.practice"
             type="info"
@@ -38,12 +34,11 @@
             class="practice-alert"
           >
             <template #header>
-              <b>✍️ 动手练习</b>：{{ lesson.practice.title }}
+              <b>动手练习</b>：{{ lesson.practice.title }}
             </template>
           </n-alert>
         </n-card>
 
-        <!-- 前后导航 -->
         <div class="lesson-actions">
           <n-button size="large" round @click="goPrev" :disabled="!prevLesson">
             <n-icon><ArrowLeft /></n-icon>&nbsp;上一节
@@ -64,9 +59,8 @@
         </div>
       </div>
 
-      <!-- 右栏：任务面板 + 模拟终端 -->
       <div class="lesson-side">
-        <GitTaskPanel
+        <MySQLTaskPanel
           v-if="lesson.practice"
           :key="'task-' + lesson.id"
           :practice="lesson.practice"
@@ -84,7 +78,7 @@
             <span>实操终端</span>
             <n-tag size="small" type="success" :bordered="false" round class="live-tag">模拟环境</n-tag>
           </div>
-          <GitTerminal
+          <MySQLTerminal
             :key="'term-' + lesson.id"
             :suggestions="practiceCommands"
             @command-executed="onCommand"
@@ -92,58 +86,54 @@
           />
           <div class="terminal-foot">
             <n-icon><InfoFilled /></n-icon>
-            输入 <code>help</code> 查看所有命令 · ↑↓ 历史 · Tab 补全 · 任务完成自动检测
+            输入 <code>help</code> 查看示例 · ↑↓ 历史 · Tab 补全 · 数据面板实时刷新
           </div>
         </div>
       </div>
 
-      <!-- 右侧悬浮仓库状态面板 -->
-      <GitStatePanel :check-tick="checkTick" />
+      <MySQLStatePanel :check-tick="checkTick" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, confirmDialog } from '@/utils/feedback'
-import { gitChapters } from '@/data/gitLessons'
-import { useGitProgressStore } from '@/stores/gitProgress'
-import { resetGitEnvironment, loadGitState, saveGitState, clearGitState } from '@/terminal/gitSimulator'
-import type { GitLesson, GitChapter } from '@/types'
+import { mysqlChapters } from '@/data/mysqlLessons'
+import { useMySqlProgressStore } from '@/stores/mysqlProgress'
+import { clearMySqlState, loadMySqlState, resetMySqlEnvironment, saveMySqlState } from '@/terminal/mysqlSimulator'
+import type { MySqlChapter, MySqlLesson } from '@/types'
 import LessonContent from '@/components/LessonContent.vue'
-import GitTerminal from '@/components/GitTerminal.vue'
-import GitTaskPanel from '@/components/GitTaskPanel.vue'
-import GitStatePanel from '@/components/GitStatePanel.vue'
+import MySQLTerminal from '@/components/MySQLTerminal.vue'
+import MySQLTaskPanel from '@/components/MySQLTaskPanel.vue'
+import MySQLStatePanel from '@/components/MySQLStatePanel.vue'
 
 const route = useRoute()
 const router = useRouter()
-const store = useGitProgressStore()
+const store = useMySqlProgressStore()
 
-interface FlatLesson extends GitLesson {
+interface FlatLesson extends MySqlLesson {
   chapterId: string
 }
 
 const allLessons = computed<FlatLesson[]>(() =>
-  gitChapters.flatMap((c: GitChapter) => c.lessons.map((l) => ({ ...l, chapterId: c.id })))
+  mysqlChapters.flatMap((c: MySqlChapter) => c.lessons.map((l) => ({ ...l, chapterId: c.id })))
 )
 const index = computed(() => allLessons.value.findIndex((l) => l.id === route.params.lessonId))
 const lesson = computed<FlatLesson | null>(() => allLessons.value[index.value] || null)
-const chapter = computed(() => gitChapters.find((c) => c.id === lesson.value?.chapterId))
+const chapter = computed(() => mysqlChapters.find((c) => c.id === lesson.value?.chapterId))
 const prevLesson = computed(() => index.value > 0 ? allLessons.value[index.value - 1] : null)
 const nextLesson = computed(() => index.value < allLessons.value.length - 1 ? allLessons.value[index.value + 1] : null)
 
 const practiceCommands = computed(() => lesson.value?.practice?.commands || [])
-
-// 命令执行计数（每次执行 +1，触发任务面板自动检测）与连续错误次数
 const checkTick = ref(0)
 const errorStreak = ref(0)
 
 watch(lesson, (l) => {
   if (l) {
-    // 切换课时：优先恢复本课时缓存的仓库状态；无缓存则重置为初始状态
-    const restored = loadGitState(l.id)
-    if (!restored) resetGitEnvironment()
+    const restored = loadMySqlState(l.id)
+    if (!restored) resetMySqlEnvironment()
     checkTick.value++
     errorStreak.value = 0
     store.setLastVisited(l.id)
@@ -154,17 +144,16 @@ onMounted(() => {
   checkTick.value++
 })
 
-function onCommand({ ok, errorStreak: streak }: { ok: boolean; errorStreak: number }) {
+function onCommand({ errorStreak: streak }: { ok: boolean; errorStreak: number }) {
   errorStreak.value = streak || 0
   checkTick.value++
-  // 命令执行后自动保存仓库状态到 localStorage
-  if (lesson.value) saveGitState(lesson.value.id)
+  if (lesson.value) saveMySqlState(lesson.value.id)
 }
 
 function onAutoDone() {
   if (!lesson.value) return
   store.completeLesson(lesson.value.id)
-  message.success('🎉 任务完成！本节已自动记录')
+  message.success('任务完成！本节已自动记录')
 }
 
 function onComplete() {
@@ -181,27 +170,27 @@ function markDone() {
   if (!lesson.value) return
   const done = store.isLessonCompleted(lesson.value.id)
   store.completeLesson(lesson.value.id)
-  message.success(done ? '本节已完成' : '本节已标记完成，进度已保存 🎉')
+  message.success(done ? '本节已完成' : '本节已标记完成，进度已保存')
 }
 
 function goPrev() {
-  if (prevLesson.value) router.push(`/git/lesson/${prevLesson.value.id}`)
+  if (prevLesson.value) router.push(`/mysql/lesson/${prevLesson.value.id}`)
 }
 
 function goNext() {
-  if (nextLesson.value) router.push(`/git/lesson/${nextLesson.value.id}`)
+  if (nextLesson.value) router.push(`/mysql/lesson/${nextLesson.value.id}`)
 }
 
 function resetPractice() {
   if (!lesson.value) return
   confirmDialog(
-    '重置将清空当前课时的仓库缓存，回到初始练习状态。确定要继续吗？',
+    '重置将清空当前课时的 MySQL 模拟数据，回到初始练习状态。确定要继续吗？',
     '重置当前练习',
     { confirmButtonText: '重置', cancelButtonText: '取消', type: 'warning' }
   )
     .then(() => {
-      clearGitState(lesson.value!.id)
-      resetGitEnvironment()
+      clearMySqlState(lesson.value!.id)
+      resetMySqlEnvironment()
       checkTick.value++
       message.success('当前练习已重置')
     })
@@ -210,7 +199,7 @@ function resetPractice() {
 </script>
 
 <style scoped>
-.git-lesson-page {
+.mysql-lesson-page {
   max-width: 1600px;
   margin: 0 auto;
 }
@@ -285,7 +274,7 @@ function resetPractice() {
   border-radius: 14px;
   border: 1px solid var(--border-light);
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 20px rgba(0, 55, 80, 0.06);
 }
 
 .widget-head {
@@ -293,7 +282,7 @@ function resetPractice() {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #f8fafc;
+  background: #f8fbfd;
   border-bottom: 1px solid var(--border-light);
   font-size: 14px;
   font-weight: 700;
@@ -301,7 +290,7 @@ function resetPractice() {
 }
 
 .widget-head .n-icon {
-  color: #f05032;
+  color: #00618a;
   font-size: 17px;
 }
 
@@ -314,21 +303,21 @@ function resetPractice() {
   align-items: center;
   gap: 6px;
   padding: 9px 14px;
-  background: #f8fafc;
+  background: #f8fbfd;
   border-top: 1px solid var(--border-light);
   font-size: 11.5px;
   color: #909399;
 }
 
 .terminal-foot .n-icon {
-  color: #f05032;
+  color: #00618a;
 }
 
 .terminal-foot code {
-  background: #eef2f7;
+  background: #eefcff;
   padding: 1px 6px;
   border-radius: 4px;
-  color: #c9472c;
+  color: #00618a;
 }
 
 @media (max-width: 1200px) {
@@ -365,6 +354,3 @@ function resetPractice() {
   }
 }
 </style>
-
-
-

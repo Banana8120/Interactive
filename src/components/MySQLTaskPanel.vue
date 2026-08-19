@@ -1,6 +1,5 @@
-﻿<template>
+<template>
   <div class="task-panel">
-    <!-- 任务头部 -->
     <div class="task-head">
       <div class="task-title">
         <n-icon :size="16"><Goal /></n-icon>
@@ -14,12 +13,10 @@
       >{{ done ? '已完成' : '进行中' }}</n-tag>
     </div>
 
-    <!-- 任务描述 -->
     <div class="task-body">
       <div class="task-name">{{ practice.title }}</div>
       <p class="task-desc">{{ practice.desc }}</p>
 
-      <!-- 完成提示 -->
       <transition name="fade">
         <n-alert
           v-if="done"
@@ -31,7 +28,6 @@
         </n-alert>
       </transition>
 
-      <!-- 卡住自动提示 -->
       <transition name="fade">
         <n-alert
           v-if="stuckHint"
@@ -40,12 +36,11 @@
           class="task-stuck"
         >
           <template #header>
-            <b>💡 卡住了？试试：</b>{{ stuckHint }}
+            <b>卡住了？试试：</b>{{ stuckHint }}
           </template>
         </n-alert>
       </transition>
 
-      <!-- 分级提示 -->
       <div class="hint-area" v-if="practice.hints && practice.hints.length">
         <n-button
           size="small"
@@ -67,7 +62,6 @@
       </div>
     </div>
 
-    <!-- 底部操作 -->
     <div class="task-foot">
       <n-button
         size="small"
@@ -79,23 +73,21 @@
         <n-icon><CircleCheck /></n-icon>&nbsp;{{ done ? '已完成' : '标记本节完成' }}
       </n-button>
       <span class="task-foot-tip" v-if="!done">在终端完成操作后自动检测</span>
-      <span class="task-foot-tip" v-else>干得漂亮！🎉</span>
+      <span class="task-foot-tip" v-else>任务已记录</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message } from '@/utils/feedback'
-import { getGitState } from '@/terminal/gitSimulator'
-import type { GitPractice } from '@/types'
+import { getMySqlState } from '@/terminal/mysqlSimulator'
+import type { MySqlPractice } from '@/types'
 
 interface Props {
-  practice: GitPractice
+  practice: MySqlPractice
   lessonId: string
-  /** 命令执行次数（每次命令后 +1，触发自动检测） */
   checkTick?: number
-  /** 连续错误次数（触发卡住提示） */
   errorStreak?: number
   done?: boolean
 }
@@ -114,19 +106,16 @@ const emit = defineEmits<{
 
 const revealed = ref(0)
 
-// 任务完成检测（由父组件基于 checkTick 触发，或本组件直接调用）
 const doneNow = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
   props.checkTick
   if (!props.practice || typeof props.practice.check !== 'function') return false
   try {
-    return !!props.practice.check(getGitState())
+    return !!props.practice.check(getMySqlState())
   } catch (e) {
     return false
   }
 })
 
-// 卡住提示：连续错误 >= 2 次，且还没看过提示
 const stuckHint = computed(() => {
   if (props.errorStreak < 2) return ''
   if (!props.practice.hints || !props.practice.hints.length) return ''
@@ -142,13 +131,12 @@ function nextHint() {
 function markDone() {
   if (doneNow.value || props.done) {
     emit('complete')
-    message.success('本节已标记完成，进度已保存 🎉')
+    message.success('本节已标记完成，进度已保存')
   } else {
-    message.info('任务还未完成，再试试看？或点击“查看提示”获取线索。')
+    message.info('任务还未完成，再试试看，或打开提示看一眼线索。')
   }
 }
 
-// 每次命令执行后重新检测（父组件 watch checkTick 调用）
 watch(() => props.checkTick, () => {
   if (doneNow.value) emit('auto-done')
 })
@@ -160,7 +148,7 @@ watch(() => props.checkTick, () => {
   border: 1px solid var(--border-light);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 20px rgba(0, 55, 80, 0.06);
 }
 
 .task-head {
@@ -168,7 +156,7 @@ watch(() => props.checkTick, () => {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #fff5f0 0%, #fff 60%);
+  background: linear-gradient(135deg, #eefcff 0%, #fff 68%);
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -178,7 +166,7 @@ watch(() => props.checkTick, () => {
   gap: 6px;
   font-size: 14px;
   font-weight: 700;
-  color: #c9472c;
+  color: #00618a;
   flex: 1;
 }
 
@@ -200,19 +188,7 @@ watch(() => props.checkTick, () => {
   margin: 0 0 12px;
 }
 
-.task-desc :deep(code) {
-  background: #fdf0eb;
-  color: #c9472c;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.task-success {
-  margin-bottom: 10px;
-  border-radius: 8px;
-}
-
+.task-success,
 .task-stuck {
   margin-bottom: 10px;
   border-radius: 8px;
@@ -238,8 +214,8 @@ watch(() => props.checkTick, () => {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  background: #f6f8fb;
-  border: 1px dashed #c9d6e5;
+  background: #f6fbfd;
+  border: 1px dashed #b8dce8;
   border-radius: 8px;
   padding: 7px 10px;
 }
@@ -249,7 +225,7 @@ watch(() => props.checkTick, () => {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #f05032;
+  background: #00a3c4;
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -261,7 +237,7 @@ watch(() => props.checkTick, () => {
 
 .hint-item code {
   font-size: 12px;
-  color: #3c4a5c;
+  color: #2f4d5f;
   line-height: 1.6;
   word-break: break-all;
   white-space: pre-wrap;
@@ -274,7 +250,7 @@ watch(() => props.checkTick, () => {
   justify-content: space-between;
   gap: 8px;
   padding: 12px 16px;
-  background: #fafbfc;
+  background: #fafcfd;
   border-top: 1px solid var(--border-light);
 }
 
@@ -286,6 +262,7 @@ watch(() => props.checkTick, () => {
 .hint-list-enter-active {
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .hint-list-enter-from {
   opacity: 0;
   transform: translateY(-6px);
@@ -295,11 +272,9 @@ watch(() => props.checkTick, () => {
 .fade-leave-active {
   transition: opacity 0.3s;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
 </style>
-
-
-

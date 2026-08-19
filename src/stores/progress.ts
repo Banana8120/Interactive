@@ -15,6 +15,7 @@ export interface ProgressState {
   quizResults: Record<string, QuizResult>
   finishedChapters: string[]
   lastVisited: string | null
+  lastVisitedAt: number
   startedAt: number
   hintsUsed: Record<string, number>
 }
@@ -22,11 +23,30 @@ export interface ProgressState {
 function loadState(): ProgressState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as ProgressState
+    if (raw) {
+      const state = JSON.parse(raw) as Partial<ProgressState>
+      return {
+        completedLessons: state.completedLessons || [],
+        quizResults: state.quizResults || {},
+        finishedChapters: state.finishedChapters || [],
+        lastVisited: state.lastVisited || null,
+        lastVisitedAt: state.lastVisitedAt || 0,
+        startedAt: state.startedAt || Date.now(),
+        hintsUsed: state.hintsUsed || {}
+      }
+    }
   } catch (e) {
     /* ignore */
   }
-  return { completedLessons: [], quizResults: {}, finishedChapters: [], lastVisited: null, startedAt: Date.now(), hintsUsed: {} }
+  return {
+    completedLessons: [],
+    quizResults: {},
+    finishedChapters: [],
+    lastVisited: null,
+    lastVisitedAt: 0,
+    startedAt: Date.now(),
+    hintsUsed: {}
+  }
 }
 
 export const useProgressStore = defineStore('progress', {
@@ -73,6 +93,7 @@ export const useProgressStore = defineStore('progress', {
         quizResults: this.quizResults,
         finishedChapters: this.finishedChapters,
         lastVisited: this.lastVisited,
+        lastVisitedAt: this.lastVisitedAt,
         startedAt: this.startedAt,
         hintsUsed: this.hintsUsed
       }))
@@ -99,6 +120,7 @@ export const useProgressStore = defineStore('progress', {
 
     setLastVisited(lessonId: string | null) {
       this.lastVisited = lessonId
+      this.lastVisitedAt = lessonId ? Date.now() : 0
       this.persist()
     },
 
@@ -113,6 +135,7 @@ export const useProgressStore = defineStore('progress', {
       this.quizResults = {}
       this.finishedChapters = []
       this.lastVisited = null
+      this.lastVisitedAt = 0
       this.startedAt = Date.now()
       this.persist()
     }

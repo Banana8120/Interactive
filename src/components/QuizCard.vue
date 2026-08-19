@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <div class="quiz-card">
     <div class="quiz-header">
-      <el-icon class="quiz-icon"><QuestionFilled /></el-icon>
+      <n-icon class="quiz-icon"><QuestionFilled /></n-icon>
       <div>
         <div class="quiz-title">小测验</div>
         <div class="quiz-sub">回答下面的问题，检验本节学习效果</div>
@@ -21,17 +21,17 @@
         >
           <span class="opt-letter">{{ String.fromCharCode(65 + oi) }}</span>
           <span class="opt-text">{{ opt }}</span>
-          <el-icon v-if="answered[qi] === oi" class="opt-mark"><Select /></el-icon>
-          <el-icon v-else-if="answered[qi] !== undefined && oi === q.answer" class="opt-mark"><CircleCheckFilled /></el-icon>
+          <n-icon v-if="answered[qi] === oi" class="opt-mark"><Select /></n-icon>
+          <n-icon v-else-if="answered[qi] !== undefined && oi === q.answer" class="opt-mark"><CircleCheckFilled /></n-icon>
         </button>
       </div>
 
       <transition name="fade">
         <div v-if="answered[qi] !== undefined" class="quiz-feedback" :class="answered[qi] === q.answer ? 'correct' : 'wrong'">
-          <el-icon>
+          <n-icon>
             <CircleCheckFilled v-if="answered[qi] === q.answer" />
             <CircleCloseFilled v-else />
-          </el-icon>
+          </n-icon>
           <div class="feedback-text">
             <b>{{ answered[qi] === q.answer ? '回答正确！' : '回答错误' }}</b>
             <span>{{ q.explain }}</span>
@@ -225,7 +225,7 @@ function optionClass(qi: number, oi: number): string {
   align-items: flex-start;
 }
 
-.quiz-feedback .el-icon {
+.quiz-feedback .n-icon {
   font-size: 18px;
   margin-top: 2px;
   flex-shrink: 0;
@@ -247,3 +247,4 @@ function optionClass(qi: number, oi: number): string {
   gap: 2px;
 }
 </style>
+

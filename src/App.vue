@@ -1,9 +1,9 @@
-<template>
-    <el-container class="app-shell">
-        <el-header class="app-header" height="56px">
+﻿<template>
+    <n-layout class="app-shell">
+        <n-layout-header class="app-header" style="height: 56px">
             <div class="header-inner">
                 <router-link to="/" class="brand">
-                    <img src="/favicon.svg" alt="Docker + Git 交互式教程" class="brand-logo" />
+                    <img src="/favicon.svg" alt="交互式学习教程" class="brand-logo" />
                     <span class="brand-text">
                         <span class="brand-sub">交互式学习教程</span>
                     </span>
@@ -17,70 +17,48 @@
                         class="nav-link"
                         :class="{
                             active: isActive(item.path),
-                            'git-active': item.path === '/git' && isActive(item.path),
+                            'git-active': item.kind === 'git' && isActive(item.path),
+                            'mysql-active': item.kind === 'mysql' && isActive(item.path),
                         }"
                     >
-                        <el-icon><component :is="item.icon" /></el-icon>
+                        <n-icon><component :is="item.icon" /></n-icon>
                         <span>{{ item.label }}</span>
                     </router-link>
                 </nav>
 
                 <div class="header-progress">
-                    <template v-if="isProgressPage">
-                        <el-tooltip :content="`总进度 ${combinedPercent}%`" placement="bottom">
-                            <el-progress
+                    <n-tooltip placement="bottom">
+                        <template #trigger>
+                            <n-progress
                                 type="circle"
-                                :percentage="combinedPercent"
-                                :width="40"
+                                :percentage="activeProgress.percent"
+                                :style="{ width: '40px' }"
                                 :stroke-width="5"
-                                color="#7C4DFF"
-                                :show-text="false"
+                                :color="activeProgress.color"
+                                :show-indicator="false"
                             />
-                        </el-tooltip>
-                        <span class="progress-label combined-label" v-if="!isMobile">{{ combinedPercent }}%</span>
-                    </template>
-                    <template v-else-if="isGitModule">
-                        <el-tooltip :content="`Git 学习已完成 ${gitStore.overallPercent}%`" placement="bottom">
-                            <el-progress
-                                type="circle"
-                                :percentage="gitStore.overallPercent"
-                                :width="40"
-                                :stroke-width="5"
-                                color="#F05032"
-                                :show-text="false"
-                            />
-                        </el-tooltip>
-                        <span class="progress-label git-label" v-if="!isMobile">{{ gitStore.overallPercent }}%</span>
-                    </template>
-                    <template v-else>
-                        <el-tooltip :content="`Docker 学习已完成 ${store.overallPercent}%`" placement="bottom">
-                            <el-progress
-                                type="circle"
-                                :percentage="store.overallPercent"
-                                :width="40"
-                                :stroke-width="5"
-                                color="#2496ED"
-                                :show-text="false"
-                            />
-                        </el-tooltip>
-                        <span class="progress-label" v-if="!isMobile">{{ store.overallPercent }}%</span>
-                    </template>
+                        </template>
+                        {{ activeProgress.label }} 学习已完成 {{ activeProgress.percent }}%
+                    </n-tooltip>
+                    <span class="progress-label" :style="{ color: activeProgress.color }" v-if="!isMobile">
+                        {{ activeProgress.percent }}%
+                    </span>
                 </div>
             </div>
-        </el-header>
+        </n-layout-header>
 
-        <el-main class="app-main">
+        <n-layout-content class="app-main" :class="mainClass">
             <router-view v-slot="{ Component }">
                 <transition name="fade" mode="out-in">
                     <component :is="Component" />
                 </transition>
             </router-view>
-        </el-main>
+        </n-layout-content>
 
-        <el-footer class="app-footer" height="44px">
-            <span>交互式学习教程 · 终端为浏览器内模拟环境</span>
-        </el-footer>
-    </el-container>
+        <n-layout-footer class="app-footer" style="height: 44px">
+            <span>交互式学习教程 · 终端与预览均为浏览器内模拟环境</span>
+        </n-layout-footer>
+    </n-layout>
 </template>
 
 <script setup lang="ts">
@@ -88,32 +66,41 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProgressStore } from '@/stores/progress'
 import { useGitProgressStore } from '@/stores/gitProgress'
+import { useMySqlProgressStore } from '@/stores/mysqlProgress'
 
 const route = useRoute()
 const store = useProgressStore()
 const gitStore = useGitProgressStore()
+const mysqlStore = useMySqlProgressStore()
+
+type NavKind = 'docker' | 'git' | 'mysql'
 
 interface NavItem {
   path: string
   label: string
   icon: string
+  kind: NavKind
 }
 
 const navItems: NavItem[] = [
-    { path: '/', label: 'Docker 学习', icon: 'HomeFilled' },
-    { path: '/git', label: 'Git 学习', icon: 'Share' },
-    { path: '/progress', label: '总学习进度', icon: 'DataLine' },
+    { path: '/', label: 'Docker 学习', icon: 'HomeFilled', kind: 'docker' },
+    { path: '/git', label: 'Git 学习', icon: 'Share', kind: 'git' },
+    { path: '/mysql', label: 'MySQL 学习', icon: 'Database', kind: 'mysql' },
 ]
 
 const isGitModule = computed(() => route.path.startsWith('/git'))
-const isProgressPage = computed(() => route.path === '/progress')
+const isMySqlModule = computed(() => route.path.startsWith('/mysql'))
 
-const totalLessons = computed(() => store.totalLessons + gitStore.totalLessons)
-const completedLessons = computed(() => store.completedCount + gitStore.completedCount)
-const combinedPercent = computed(() => {
-    const total = totalLessons.value
-    return total ? Math.round((completedLessons.value / total) * 100) : 0
+const activeProgress = computed(() => {
+    if (isGitModule.value) return { label: 'Git', percent: gitStore.overallPercent, color: '#F05032' }
+    if (isMySqlModule.value) return { label: 'MySQL', percent: mysqlStore.overallPercent, color: '#00618A' }
+    return { label: 'Docker', percent: store.overallPercent, color: '#2496ED' }
 })
+
+const mainClass = computed(() => ({
+    'git-main': isGitModule.value,
+    'mysql-main': isMySqlModule.value,
+}))
 
 const isMobile = ref(false)
 const checkMobile = () => {
@@ -215,6 +202,11 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
     color: #f05032;
 }
 
+.nav-link.mysql-active.active {
+    background: rgba(0, 97, 138, 0.1);
+    color: #00618a;
+}
+
 .header-progress {
     display: flex;
     align-items: center;
@@ -232,14 +224,18 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
     color: #f05032;
 }
 
-.progress-label.combined-label {
-    color: #7c4dff;
-}
-
 .app-main {
     padding: 24px 20px 40px;
     background: var(--docker-bg);
     overflow-y: auto;
+}
+
+.app-main.git-main {
+    background: #fff6f3;
+}
+
+.app-main.mysql-main {
+    background: #f0fbff;
 }
 
 .app-footer {
@@ -287,3 +283,5 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
     }
 }
 </style>
+
+

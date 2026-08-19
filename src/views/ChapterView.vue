@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div v-if="chapter" class="chapter-page">
-    <el-page-header @back="$router.push('/')" class="page-header">
+    <n-page-header @back="$router.push('/')" class="page-header">
       <template #content>
         <div class="header-title">
           <span class="chapter-index">{{ chapter.index }}</span>
@@ -8,30 +8,30 @@
         </div>
       </template>
       <template #extra>
-        <el-progress
+        <n-progress
           type="circle"
           :percentage="percent"
-          :width="46"
+          :style="{ width: '46px' }"
           :stroke-width="6"
           :color="chapter.color"
-          :show-text="false"
+          :show-indicator="false"
         />
       </template>
-    </el-page-header>
+    </n-page-header>
 
     <div class="chapter-desc">
       <div class="desc-icon" :style="{ background: chapter.color + '1a', color: chapter.color }">
-        <el-icon :size="30"><component :is="chapter.icon" /></el-icon>
+        <n-icon :size="30"><component :is="chapter.icon" /></n-icon>
       </div>
       <div>
         <p class="desc-text">{{ chapter.description }}</p>
         <div class="desc-meta">
-          <el-tag size="small" :style="{ color: chapter.color, borderColor: chapter.color + '55', background: chapter.color + '0d' }" effect="plain">
+          <n-tag size="small" :style="{ color: chapter.color, borderColor: chapter.color + '55', background: chapter.color + '0d' }" :bordered="true">
             {{ chapter.lessons.length }} 节课 · 约 {{ chapter.minutes }} 分钟
-          </el-tag>
-          <el-tag v-if="store.isChapterCompleted(chapter.id)" type="success" size="small" effect="light" round>
+          </n-tag>
+          <n-tag v-if="store.isChapterCompleted(chapter.id)" type="success" size="small" :bordered="false" round>
             本章已完成 ✓
-          </el-tag>
+          </n-tag>
         </div>
       </div>
     </div>
@@ -46,46 +46,46 @@
         @click="goLesson(lesson)"
       >
         <div class="lesson-status">
-          <el-icon v-if="store.isLessonCompleted(lesson.id)" class="done-icon"><CircleCheckFilled /></el-icon>
+          <n-icon v-if="store.isLessonCompleted(lesson.id)" class="done-icon"><CircleCheckFilled /></n-icon>
           <span v-else class="lesson-num">{{ String(i + 1).padStart(2, '0') }}</span>
         </div>
         <div class="lesson-body">
           <div class="lesson-title">
             {{ lesson.title }}
-            <el-tag size="small" effect="plain" class="concept-tag">{{ lesson.concept }}</el-tag>
+            <n-tag size="small" :bordered="true" class="concept-tag">{{ lesson.concept }}</n-tag>
           </div>
           <div class="lesson-tags">
             <span v-if="lesson.terminal && lesson.terminal.enabled">
-              <el-icon><Monitor /></el-icon> 含终端练习
+              <n-icon><Monitor /></n-icon> 含终端练习
             </span>
             <span v-if="lesson.quiz && lesson.quiz.length">
-              <el-icon><QuestionFilled /></el-icon> {{ lesson.quiz.length }} 道测验
+              <n-icon><QuestionFilled /></n-icon> {{ lesson.quiz.length }} 道测验
             </span>
             <span v-if="store.isLessonCompleted(lesson.id)">✓ 已学完</span>
           </div>
         </div>
-        <el-icon class="lesson-arrow"><ArrowRight /></el-icon>
+        <n-icon class="lesson-arrow"><ArrowRight /></n-icon>
       </div>
     </div>
 
     <!-- 章节导航 -->
     <div class="chapter-nav">
-      <el-button
+      <n-button
         v-if="prevChapter"
-        plain
+        secondary
         round
         @click="$router.push(`/chapter/${prevChapter.id}`)"
       >
-        <el-icon><ArrowLeft /></el-icon>&nbsp;上一章：{{ prevChapter.title }}
-      </el-button>
-      <el-button
+        <n-icon><ArrowLeft /></n-icon>&nbsp;上一章：{{ prevChapter.title }}
+      </n-button>
+      <n-button
         v-if="nextChapter"
         type="primary"
         round
         @click="$router.push(`/chapter/${nextChapter.id}`)"
       >
-        下一章：{{ nextChapter.title }}&nbsp;<el-icon><ArrowRight /></el-icon>
-      </el-button>
+        下一章：{{ nextChapter.title }}&nbsp;<n-icon><ArrowRight /></n-icon>
+      </n-button>
     </div>
   </div>
 </template>
@@ -279,8 +279,10 @@ const goLesson = (lesson: { id: string }) => router.push(`/lesson/${lesson.id}`)
     text-align: center;
   }
 
-  .chapter-nav :deep(.el-button) {
+  .chapter-nav :deep(.n-button) {
     width: 100%;
   }
 }
 </style>
+
+

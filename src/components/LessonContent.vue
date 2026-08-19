@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="lesson-content">
     <template v-for="(block, i) in blocks" :key="i">
       <!-- 段落文本 -->
@@ -11,34 +11,34 @@
           <pre>{{ block.code }}</pre>
         </div>
         <button v-if="block.code && !block.hideCopy" class="copy-btn" @click="copyCode(block.code)">
-          <el-icon><CopyDocument /></el-icon>
+          <n-icon><CopyDocument /></n-icon>
           复制
         </button>
       </div>
 
       <!-- 提示 -->
-      <el-alert
+      <n-alert
         v-else-if="block.type === 'tip'"
         type="success"
         :closable="false"
         class="content-alert"
       >
-        <template #title>
+        <template #header>
           <b v-if="block.title">{{ block.title }}：</b>{{ plain(block.text) }}
         </template>
-      </el-alert>
+      </n-alert>
 
       <!-- 警告 -->
-      <el-alert
+      <n-alert
         v-else-if="block.type === 'warning'"
         type="warning"
         :closable="false"
         class="content-alert"
       >
-        <template #title>
+        <template #header>
           <b v-if="block.title">{{ block.title }}：</b>{{ plain(block.text) }}
         </template>
-      </el-alert>
+      </n-alert>
 
       <!-- 表格 -->
       <div v-else-if="block.type === 'table'" class="table-wrap">
@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { message } from '@/utils/feedback'
 import type { ContentBlock } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -85,9 +85,9 @@ const rich = (t?: string) => {
 async function copyCode(code: string) {
   try {
     await navigator.clipboard.writeText(code)
-    ElMessage.success('代码已复制到剪贴板')
+    message.success('代码已复制到剪贴板')
   } catch (e) {
-    ElMessage.warning('复制失败，请手动选择复制')
+    message.warning('复制失败，请手动选择复制')
   }
 }
 </script>
@@ -130,7 +130,7 @@ async function copyCode(code: string) {
   border-radius: 8px;
 }
 
-.content-alert :deep(.el-alert__title) {
+.content-alert :deep(.n-alert-body__title) {
   font-size: 13.5px;
   line-height: 1.7;
 }
@@ -144,3 +144,6 @@ async function copyCode(code: string) {
   min-width: 100%;
 }
 </style>
+
+
+

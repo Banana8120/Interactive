@@ -84,7 +84,7 @@ export interface DockerContainer {
   id: string
   name: string
   image: string
-  status: 'running' | 'exited' | 'created'
+  status: 'running' | 'exited' | 'created' | 'paused'
   ports: string
   composeProject?: string
 }
@@ -196,4 +196,94 @@ export interface GitState {
   reflog: any[]
   mergeState: any
   cherryPickState: any
+  worktrees?: any[]
+  bisectState?: any
+}
+
+/* ================= MySQL 类型 ================= */
+
+export type MySqlValue = string | number | null
+
+export interface MySqlColumn {
+  name: string
+  type: string
+  nullable: boolean
+  primaryKey?: boolean
+  autoIncrement?: boolean
+  defaultValue?: MySqlValue
+}
+
+export interface MySqlRow {
+  [key: string]: MySqlValue
+}
+
+export interface MySqlTable {
+  name: string
+  columns: MySqlColumn[]
+  rows: MySqlRow[]
+  autoIncrement: number
+}
+
+export interface MySqlDatabase {
+  name: string
+  tables: Record<string, MySqlTable>
+  system?: boolean
+}
+
+export interface MySqlState {
+  connected: boolean
+  currentDatabase: string | null
+  databases: Record<string, MySqlDatabase>
+  history: string[]
+}
+
+export interface MySqlPractice {
+  title: string
+  desc: string
+  commands: string[]
+  check: (env?: MySqlState) => boolean
+  successMsg?: string
+  hints: string[]
+}
+
+export interface MySqlTerminalConfig {
+  enabled: boolean
+  task: string
+  commands: string[]
+}
+
+export interface MySqlQuiz {
+  question: string
+  options: string[]
+  answer: number
+  explain: string
+}
+
+export interface MySqlLesson {
+  id: string
+  title: string
+  concept: string
+  content: ContentBlock[]
+  terminal?: MySqlTerminalConfig
+  practice?: MySqlPractice
+  quiz?: MySqlQuiz[]
+}
+
+export interface MySqlChapter {
+  id: string
+  index: string
+  title: string
+  icon: string
+  color: string
+  minutes: number
+  lessonsCount?: number
+  description: string
+  lessons: MySqlLesson[]
+}
+
+export interface MySqlCourseStats {
+  chapters: number
+  lessons: number
+  practices: number
+  quizzes: number
 }

@@ -4,7 +4,7 @@ import 'vue-router'
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
-    module?: 'git'
+    module?: 'git' | 'mysql'
   }
 }
 
@@ -28,12 +28,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '课时' },
   },
   {
-    path: '/progress',
-    name: 'progress',
-    component: () => import('@/views/ProgressView.vue'),
-    meta: { title: '学习进度' },
-  },
-  {
     path: '/git',
     name: 'git-home',
     component: () => import('@/views/GitHomeView.vue'),
@@ -44,6 +38,18 @@ const routes: RouteRecordRaw[] = [
     name: 'git-lesson',
     component: () => import('@/views/GitLessonView.vue'),
     meta: { title: 'Git 课时', module: 'git' },
+  },
+  {
+    path: '/mysql',
+    name: 'mysql-home',
+    component: () => import('@/views/MySQLHomeView.vue'),
+    meta: { title: 'MySQL 交互式学习', module: 'mysql' },
+  },
+  {
+    path: '/mysql/lesson/:lessonId',
+    name: 'mysql-lesson',
+    component: () => import('@/views/MySQLLessonView.vue'),
+    meta: { title: 'MySQL 课时', module: 'mysql' },
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -57,7 +63,11 @@ const router = createRouter({
 })
 
 router.afterEach((to) => {
-  const suffix = to.meta.module === 'git' ? 'Git 交互式教程' : 'Docker 交互式教程'
+  const suffixMap = {
+    git: 'Git 交互式教程',
+    mysql: 'MySQL 交互式教程'
+  }
+  const suffix = to.meta.module ? suffixMap[to.meta.module] : 'Docker 交互式教程'
   document.title = to.meta.title ? `${to.meta.title} | ${suffix}` : suffix
 })
 

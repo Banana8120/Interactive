@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div class="home">
         <!-- Hero 区 -->
         <section class="hero">
@@ -12,14 +12,10 @@
                 </p>
 
                 <div class="hero-actions">
-                    <el-button type="primary" size="large" round @click="startLearning">
-                        <el-icon><VideoPlay /></el-icon>
+                    <n-button type="primary" size="large" round @click="startLearning">
+                        <n-icon><VideoPlay /></n-icon>
                         &nbsp;开始学习
-                    </el-button>
-                    <el-button size="large" round @click="$router.push('/progress')">
-                        <el-icon><DataLine /></el-icon>
-                        &nbsp;查看学习进度
-                    </el-button>
+                    </n-button>
                 </div>
 
                 <div class="hero-stats">
@@ -47,19 +43,19 @@
         </section>
 
         <!-- 进度条（已开始学习时显示） -->
-        <el-card v-if="store.overallPercent > 0" shadow="never" class="overall-card">
+        <n-card v-if="store.overallPercent > 0" :bordered="true" class="overall-card">
             <div class="overall-row">
                 <div class="overall-info">
-                    <el-icon><Trophy /></el-icon>
-                    <span>总进度：已完成 {{ store.completedCount }} / {{ store.totalLessons }} 节课</span>
+                    <n-icon><Trophy /></n-icon>
+                    <span>Docker 进度：已完成 {{ store.completedCount }} / {{ store.totalLessons }} 节课</span>
                 </div>
-                <el-button type="primary" link @click="continueLearning">
+                <n-button type="primary" text @click="continueLearning">
                     继续上次学习
-                    <el-icon><Right /></el-icon>
-                </el-button>
+                    <n-icon><Right /></n-icon>
+                </n-button>
             </div>
-            <el-progress :percentage="store.overallPercent" :stroke-width="12" color="#2496ED" striped striped-flow />
-        </el-card>
+            <n-progress :percentage="store.overallPercent" :stroke-width="12" color="#2496ED" processing />
+        </n-card>
 
         <!-- 章节卡片 -->
         <div class="section-title">
@@ -78,11 +74,11 @@
                 <div class="card-top">
                     <div class="card-index">{{ ch.index }}</div>
                     <div class="card-icon" :style="{ background: ch.color + '1a', color: ch.color }">
-                        <el-icon :size="26"><component :is="ch.icon" /></el-icon>
+                        <n-icon :size="26"><component :is="ch.icon" /></n-icon>
                     </div>
-                    <el-tag v-if="store.isChapterCompleted(ch.id)" size="small" type="success" effect="light" round>
+                    <n-tag v-if="store.isChapterCompleted(ch.id)" size="small" type="success" :bordered="false" round>
                         已完成
-                    </el-tag>
+                    </n-tag>
                 </div>
 
                 <h3 class="card-title">{{ ch.title }}</h3>
@@ -90,29 +86,29 @@
 
                 <div class="card-meta">
                     <span>
-                        <el-icon><Reading /></el-icon>
+                        <n-icon><Reading /></n-icon>
                         {{ ch.lessons.length }} 节课
                     </span>
                     <span>
-                        <el-icon><Timer /></el-icon>
+                        <n-icon><Timer /></n-icon>
                         约 {{ ch.minutes }} 分钟
                     </span>
                 </div>
 
                 <div class="card-progress">
-                    <el-progress
+                    <n-progress
                         :percentage="chapterPercent(ch.id)"
                         :stroke-width="8"
                         :color="ch.color"
-                        :show-text="false"
+                        :show-indicator="false"
                     />
                     <span class="card-percent">{{ chapterPercent(ch.id) }}%</span>
                 </div>
 
                 <div class="card-footer">
-                    <el-button
+                    <n-button
                         type="primary"
-                        plain
+                        secondary
                         size="small"
                         round
                         :style="{ color: ch.color, borderColor: ch.color + '66' }"
@@ -124,8 +120,8 @@
                                   ? '再次学习'
                                   : '进入章节'
                         }}
-                        <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-                    </el-button>
+                        <n-icon class="icon-right"><ArrowRight /></n-icon>
+                    </n-button>
                 </div>
             </div>
         </div>
@@ -134,7 +130,7 @@
         <div class="feature-row">
             <div class="feature-item" v-for="f in features" :key="f.title">
                 <div class="feature-icon" :style="{ background: f.color + '1a', color: f.color }">
-                    <el-icon :size="22"><component :is="f.icon" /></el-icon>
+                    <n-icon :size="22"><component :is="f.icon" /></n-icon>
                 </div>
                 <div>
                     <div class="feature-title">{{ f.title }}</div>
@@ -254,24 +250,24 @@ const goChapter = (ch: { id: string }) => router.push(`/chapter/${ch.id}`)
     flex-wrap: wrap;
 }
 
-.hero-actions :deep(.el-button--primary) {
+.hero-actions :deep(.n-button--primary-type) {
     background: #fff;
     border-color: #fff;
     color: #1b6bb3;
     font-weight: 700;
 }
 
-.hero-actions :deep(.el-button--primary:hover) {
+.hero-actions :deep(.n-button--primary-type:hover) {
     background: #eaf4ff;
 }
 
-.hero-actions :deep(.el-button:not(.el-button--primary)) {
+.hero-actions :deep(.n-button:not(.n-button--primary-type)) {
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(255, 255, 255, 0.45);
     color: #fff;
 }
 
-.hero-actions :deep(.el-button:not(.el-button--primary):hover) {
+.hero-actions :deep(.n-button:not(.n-button--primary-type):hover) {
     background: rgba(255, 255, 255, 0.24);
 }
 
@@ -328,7 +324,7 @@ const goChapter = (ch: { id: string }) => router.push(`/chapter/${ch.id}`)
     font-weight: 600;
 }
 
-.overall-info .el-icon {
+.overall-info .n-icon {
     color: #f7a600;
     font-size: 18px;
 }
@@ -428,7 +424,7 @@ const goChapter = (ch: { id: string }) => router.push(`/chapter/${ch.id}`)
     gap: 10px;
 }
 
-.card-progress :deep(.el-progress) {
+.card-progress :deep(.n-progress) {
     flex: 1;
 }
 
@@ -510,8 +506,10 @@ const goChapter = (ch: { id: string }) => router.push(`/chapter/${ch.id}`)
         grid-template-columns: 1fr;
     }
 
-    .hero-actions :deep(.el-button) {
+    .hero-actions :deep(.n-button) {
         width: 100%;
     }
 }
 </style>
+
+

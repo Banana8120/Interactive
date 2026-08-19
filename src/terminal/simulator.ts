@@ -283,6 +283,7 @@ function upTime(ts) {
 
 function containerStatusText(c) {
   if (c.status === 'running') return upTime(c.createdAt || START_TIME)
+  if (c.status === 'paused') return `Up ${timeAgo(c.createdAt || START_TIME)} (Paused)`
   if (c.status === 'exited') return `Exited (0) ${timeAgo(c.exitedAt || c.createdAt || START_TIME)}`
   return 'Created'
 }
@@ -518,10 +519,12 @@ function runHelp() {
     '',
     '  docker --version / info        查看版本与环境信息',
     '  docker images / search / pull / rmi / tag    镜像操作',
-    '  docker run / ps / start / stop / restart / rm / logs / exec / inspect / stats    容器操作',
-    '  docker build                    从 Dockerfile 构建镜像',
-    '  docker volume ls / create / rm  数据卷管理',
-    '  docker network ls / create / rm 网络管理',
+    '  docker run / create / ps / start / stop / restart / rm / logs / exec / inspect / stats    容器操作',
+    '  docker cp / top / diff / rename / commit / pause / unpause / kill    常用容器进阶操作',
+    '  docker build / history / save / load / prune    镜像构建、导入导出与清理',
+    '  docker volume ls / create / rm / prune    数据卷管理',
+    '  docker network ls / create / rm / prune   网络管理',
+    '  docker system df / prune         系统用量与清理',
     '  docker compose up / down / ps / logs / config    多容器编排',
     '  docker port <容器>              查看端口映射',
     '',
@@ -597,21 +600,36 @@ function runDocker(args) {
     case 'pull': return dockerPull(rest)
     case 'rmi': return dockerRmi(rest)
     case 'tag': return dockerTag(rest)
+    case 'create': return dockerCreate(rest)
     case 'run': return dockerRun(rest)
     case 'ps': return dockerPs(rest)
+    case 'container': return dockerContainerSub(rest)
     case 'start': return dockerStart(rest)
     case 'stop': return dockerStop(rest)
     case 'restart': return dockerRestart(rest)
+    case 'kill': return dockerKill(rest)
+    case 'pause': return dockerPause(rest)
+    case 'unpause': return dockerUnpause(rest)
     case 'rm': return dockerRm(rest)
     case 'logs': return dockerLogs(rest)
     case 'exec': return dockerExec(rest)
+    case 'cp': return dockerCp(rest)
+    case 'top': return dockerTop(rest)
+    case 'diff': return dockerDiff(rest)
+    case 'rename': return dockerRename(rest)
+    case 'commit': return dockerCommit(rest)
     case 'build': return dockerBuild(rest)
     case 'volume': return dockerVolume(rest)
     case 'network': return dockerNetwork(rest)
+    case 'system': return dockerSystem(rest)
     case 'compose': return runCompose(rest)
     case 'inspect': return dockerInspect(rest)
     case 'stats': return dockerStats(rest)
     case 'port': return dockerPort(rest)
+    case 'history': return dockerHistory(rest)
+    case 'save': return dockerSave(rest)
+    case 'load': return dockerLoad(rest)
+    case 'prune': return dockerSystemPrune(rest)
     default:
       return { type: 'error', lines: [`docker: '${sub}' is not a docker command.`, `运行 'docker help' 查看可用命令。`] }
   }
@@ -629,8 +647,42 @@ function dockerImageSub(args) {
   if (sub === 'rm') return dockerRmi(args.slice(1))
   if (sub === 'inspect') return dockerInspect(args.slice(1))
   if (sub === 'tag') return dockerTag(args.slice(1))
+  if (sub === 'build') return dockerBuild(args.slice(1))
+  if (sub === 'history') return dockerHistory(args.slice(1))
+  if (sub === 'save') return dockerSave(args.slice(1))
+  if (sub === 'load') return dockerLoad(args.slice(1))
+  if (sub === 'prune') return dockerImagePrune(args.slice(1))
   if (sub === 'help') return dockerHelp()
   return { type: 'error', lines: [`docker image: unknown command: ${sub || ''}`, `运行 'docker help' 查看可用命令。`] }
+}
+
+function dockerContainerSub(args) {
+  const sub = args[0]
+  if (!sub || sub === 'ls' || sub === 'list') return dockerPs(args.slice(1))
+  switch (sub) {
+    case 'run': return dockerRun(args.slice(1))
+    case 'create': return dockerCreate(args.slice(1))
+    case 'start': return dockerStart(args.slice(1))
+    case 'stop': return dockerStop(args.slice(1))
+    case 'restart': return dockerRestart(args.slice(1))
+    case 'kill': return dockerKill(args.slice(1))
+    case 'pause': return dockerPause(args.slice(1))
+    case 'unpause': return dockerUnpause(args.slice(1))
+    case 'rm': return dockerRm(args.slice(1))
+    case 'prune': return dockerContainerPrune(args.slice(1))
+    case 'logs': return dockerLogs(args.slice(1))
+    case 'exec': return dockerExec(args.slice(1))
+    case 'inspect': return dockerInspect(args.slice(1))
+    case 'stats': return dockerStats(args.slice(1))
+    case 'port': return dockerPort(args.slice(1))
+    case 'cp': return dockerCp(args.slice(1))
+    case 'top': return dockerTop(args.slice(1))
+    case 'diff': return dockerDiff(args.slice(1))
+    case 'rename': return dockerRename(args.slice(1))
+    case 'commit': return dockerCommit(args.slice(1))
+    case 'help': return containerHelp()
+    default: return { type: 'error', lines: [`docker container: unknown command: ${sub || ''}`, `运行 'docker container help' 查看可用命令。`] }
+  }
 }
 
 // --- docker help ---
@@ -643,25 +695,68 @@ function dockerHelp() {
     '',
     'Common Commands:',
     '  run         创建并启动一个容器',
+    '  create      创建一个容器但不启动',
     '  start       启动一个或多个已停止的容器',
     '  stop        停止一个或多个运行中的容器',
     '  restart     重启一个或多个容器',
+    '  kill        强制停止一个或多个容器',
+    '  pause       暂停一个或多个容器',
+    '  unpause     恢复一个或多个暂停的容器',
     '  rm          删除一个或多个容器',
     '  ps          列出容器',
+    '  cp          在容器和本地模拟项目之间复制文件',
+    '  top         查看容器进程',
+    '  diff        查看容器可写层变化',
+    '  rename      重命名容器',
+    '  commit      从容器创建新镜像',
     '  images      列出镜像',
     '  pull        从镜像仓库拉取镜像',
     '  rmi         删除一个或多个镜像',
     '  tag         标记本地镜像，将其归入某一仓库',
     '  build       从 Dockerfile 构建镜像',
+    '  history     查看镜像历史层',
+    '  save/load   导出或导入镜像归档',
     '  exec        在运行的容器中执行命令',
     '  logs        获取容器日志',
     '  inspect     获取容器/镜像的详细信息',
     '  volume      管理卷',
     '  network     管理网络',
+    '  system      管理 Docker 磁盘用量与清理',
+    '  prune       清理未使用资源',
     '  compose     Docker Compose（多容器编排）',
     '  stats       查看容器资源占用',
     '',
     "在浏览器模拟环境中，你也可以直接输入：ls、cat <文件>、clear、echo、pwd",
+    ''
+  ] }
+}
+
+function containerHelp() {
+  return { lines: [
+    '',
+    'Usage:  docker container COMMAND',
+    '',
+    'Manage containers',
+    '',
+    'Commands:',
+    '  create      Create a new container',
+    '  run         Create and run a new container',
+    '  ls          List containers',
+    '  start       Start one or more stopped containers',
+    '  stop        Stop one or more running containers',
+    '  restart     Restart one or more containers',
+    '  kill        Kill one or more running containers',
+    '  pause       Pause all processes within one or more containers',
+    '  unpause     Unpause all processes within one or more containers',
+    '  rm          Remove one or more containers',
+    '  prune       Remove all stopped containers',
+    '  logs        Fetch the logs of a container',
+    '  exec        Execute a command in a running container',
+    '  cp          Copy files/folders between a container and local filesystem',
+    '  top         Display the running processes of a container',
+    '  diff        Inspect changes to files or directories on a container filesystem',
+    '  rename      Rename a container',
+    '  commit      Create a new image from a container',
     ''
   ] }
 }
@@ -860,12 +955,13 @@ function resolvePortMap(flag, exposes) {
 
 // --- docker run ---
 function dockerRun(args) {
-  const flags = { detach: false, name: null, portMap: null, publishAll: false, volume: null, env: [], rm: false, interactive: false, network: null }
+  const flags = { detach: false, name: null, portMap: null, publishAll: false, volume: null, env: [], rm: false, interactive: false, network: null, createOnly: false }
   const positional = []
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
-    if (a === '-d' || a === '--detach') flags.detach = true
+    if (a === '--__create-only') flags.createOnly = true
+    else if (a === '-d' || a === '--detach') flags.detach = true
     else if (a === '-it') flags.interactive = true
     else if (a === '-i' || a === '--interactive') flags.interactive = true
     else if (a === '-t') { /* tty */ }
@@ -957,7 +1053,7 @@ function dockerRun(args) {
     command: cmd || imgCmd || (isHello ? '/hello' : (repo === 'ubuntu' || repo === 'alpine' ? '/bin/bash' : '')),
     created: now(),
     createdAt: Date.now(),
-    status: isHello ? 'exited' : (flags.detach || (longRunning && !cmd) || flags.interactive ? 'running' : (shortCmd ? 'exited' : 'running')),
+    status: flags.createOnly ? 'created' : (isHello ? 'exited' : (flags.detach || (longRunning && !cmd) || flags.interactive ? 'running' : (shortCmd ? 'exited' : 'running'))),
     exitedAt: null,
     name: flags.name || (repo + '_' + randomId(4) + '_' + COUNTER.container),
     ports: portMap ? portMap.text : null,
@@ -984,6 +1080,10 @@ function dockerRun(args) {
   container.logs = buildContainerLogs(container)
   COUNTER.container++
   CONTAINERS.unshift(container)
+
+  if (flags.createOnly) {
+    return { lines: [container.shortId], delay: 300 }
+  }
 
   if (isHello) {
     if (container.rm) {
@@ -1043,6 +1143,10 @@ function dockerRun(args) {
   }
 
   return { lines: [container.shortId], delay: 500 }
+}
+
+function dockerCreate(args) {
+  return dockerRun(['--__create-only', ...args])
 }
 
 // docker run 前台命令的智能推断（基于容器文件系统）
@@ -1175,6 +1279,171 @@ function dockerRm(args) {
     out.push(t)
   }
   return { lines: out, delay: 300 }
+}
+
+function dockerKill(args) {
+  const targets = args.filter(a => !a.startsWith('-'))
+  if (targets.length === 0) return { type: 'error', lines: ['"docker kill" requires at least 1 argument.'] }
+  const out = []
+  for (const t of targets) {
+    const c = CONTAINERS.find(x => x.name === t || x.shortId.startsWith(t))
+    if (!c) out.push(`Error response from daemon: No such container: ${t}`)
+    else if (c.status === 'exited') out.push(`Error response from daemon: Container ${t} is not running`)
+    else {
+      c.status = 'exited'
+      c.exitedAt = Date.now()
+      c.exitCode = 137
+      out.push(c.shortId)
+    }
+  }
+  return { lines: out, delay: 250 }
+}
+
+function dockerPause(args) {
+  const targets = args.filter(a => !a.startsWith('-'))
+  if (targets.length === 0) return { type: 'error', lines: ['"docker pause" requires at least 1 argument.'] }
+  const out = []
+  for (const t of targets) {
+    const c = CONTAINERS.find(x => x.name === t || x.shortId.startsWith(t))
+    if (!c) out.push(`Error response from daemon: No such container: ${t}`)
+    else if (c.status !== 'running') out.push(`Error response from daemon: Container ${t} is not running`)
+    else {
+      c.status = 'paused'
+      out.push(c.shortId)
+    }
+  }
+  return { lines: out, delay: 250 }
+}
+
+function dockerUnpause(args) {
+  const targets = args.filter(a => !a.startsWith('-'))
+  if (targets.length === 0) return { type: 'error', lines: ['"docker unpause" requires at least 1 argument.'] }
+  const out = []
+  for (const t of targets) {
+    const c = CONTAINERS.find(x => x.name === t || x.shortId.startsWith(t))
+    if (!c) out.push(`Error response from daemon: No such container: ${t}`)
+    else if (c.status !== 'paused') out.push(`Error response from daemon: Container ${t} is not paused`)
+    else {
+      c.status = 'running'
+      out.push(c.shortId)
+    }
+  }
+  return { lines: out, delay: 250 }
+}
+
+function parseContainerPath(spec) {
+  const m = String(spec || '').match(/^([^:]+):(.+)$/)
+  if (!m) return null
+  const c = CONTAINERS.find(x => x.name === m[1] || x.shortId.startsWith(m[1]))
+  if (!c) return { error: `Error: No such container:path: ${spec}` }
+  return { container: c, path: normalizePath(m[2]) }
+}
+
+function hostFileName(path) {
+  const clean = String(path || '').replace(/^\.?[\\/]/, '')
+  const parts = clean.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || 'copied-file'
+}
+
+function readHostFile(path) {
+  const name = hostFileName(path)
+  return HOST_PROJECT_FILES[name] ?? HOST_PROJECT_FILES[path]
+}
+
+function dockerCp(args) {
+  const operands = args.filter(a => !a.startsWith('-'))
+  const [src, dest] = operands
+  if (!src || !dest) return { type: 'error', lines: ['"docker cp" requires SRC_PATH and DEST_PATH.'] }
+
+  const srcC = parseContainerPath(src)
+  const destC = parseContainerPath(dest)
+  if (srcC && srcC.error) return { type: 'error', lines: [srcC.error] }
+  if (destC && destC.error) return { type: 'error', lines: [destC.error] }
+
+  if (srcC && !destC) {
+    const content = catContainerFile(srcC.container, srcC.path)
+    if (content === null) return { type: 'error', lines: [`Error: No such file or directory in container: ${srcC.path}`] }
+    const name = hostFileName(dest === '.' ? srcC.path : dest)
+    HOST_PROJECT_FILES[name] = content
+    return { lines: [`已从容器 ${srcC.container.name}:${srcC.path} 复制到模拟项目文件 ${name}`], delay: 250 }
+  }
+
+  if (!srcC && destC) {
+    const content = readHostFile(src)
+    if (content === undefined) return { type: 'error', lines: [`Error: lstat ${src}: no such file or directory`] }
+    if (!destC.container.fs) destC.container.fs = {}
+    const destPath = destC.path.endsWith('/') ? normalizePath(destC.path + hostFileName(src)) : destC.path
+    destC.container.fs[destPath] = content
+    return { lines: [`已复制模拟项目文件 ${hostFileName(src)} 到容器 ${destC.container.name}:${destPath}`], delay: 250 }
+  }
+
+  if (srcC && destC) {
+    const content = catContainerFile(srcC.container, srcC.path)
+    if (content === null) return { type: 'error', lines: [`Error: No such file or directory in container: ${srcC.path}`] }
+    if (!destC.container.fs) destC.container.fs = {}
+    destC.container.fs[destC.path] = content
+    return { lines: [`已在容器间复制 ${srcC.container.name}:${srcC.path} -> ${destC.container.name}:${destC.path}`], delay: 250 }
+  }
+
+  return { type: 'error', lines: ['Error: docker cp 需要至少一侧是 CONTAINER:PATH。'] }
+}
+
+function dockerTop(args) {
+  const target = args.find(a => !a.startsWith('-'))
+  if (!target) return { type: 'error', lines: ['"docker top" requires at least 1 argument.'] }
+  const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
+  if (!c) return { type: 'error', lines: [`Error: No such container: ${target}`] }
+  if (c.status !== 'running' && c.status !== 'paused') return { type: 'error', lines: [`Error response from daemon: Container ${target} is not running`] }
+  const proc = c.command || (baseRepoOf(c) === 'nginx' ? 'nginx -g daemon off;' : 'sh')
+  return { lines: [
+    'UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD',
+    `root                1                   0                   0                   ${now().slice(11, 16)}               ?                   00:00:00            ${proc}`,
+    'root                17                  1                   0                   ' + now().slice(11, 16) + '               ?                   00:00:00            ps -ef'
+  ], delay: 200 }
+}
+
+function dockerDiff(args) {
+  const target = args.find(a => !a.startsWith('-'))
+  if (!target) return { type: 'error', lines: ['"docker diff" requires exactly 1 argument.'] }
+  const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
+  if (!c) return { type: 'error', lines: [`Error: No such container: ${target}`] }
+  const changed = Object.keys(c.fs || {}).sort()
+  if (!changed.length) return { lines: ['（容器可写层没有变化）'] }
+  return { lines: changed.map(p => `C ${p}`), delay: 200 }
+}
+
+function dockerRename(args) {
+  const [oldName, newName] = args.filter(a => !a.startsWith('-'))
+  if (!oldName || !newName) return { type: 'error', lines: ['用法: docker rename <old_name> <new_name>'] }
+  const c = CONTAINERS.find(x => x.name === oldName || x.shortId.startsWith(oldName))
+  if (!c) return { type: 'error', lines: [`Error: No such container: ${oldName}`] }
+  if (CONTAINERS.some(x => x.name === newName)) return { type: 'error', lines: [`Error response from daemon: Conflict. The container name "${newName}" is already in use.`] }
+  c.name = newName
+  return { lines: [newName], delay: 200 }
+}
+
+function dockerCommit(args) {
+  const operands = args.filter(a => !a.startsWith('-') && !args[args.indexOf(a) - 1]?.startsWith('-'))
+  const target = operands[0]
+  const repoTag = operands[1] || `committed-${randomId(4)}:latest`
+  if (!target) return { type: 'error', lines: ['用法: docker commit <container> [repository[:tag]]'] }
+  const c = CONTAINERS.find(x => x.name === target || x.shortId.startsWith(target))
+  if (!c) return { type: 'error', lines: [`Error: No such container: ${target}`] }
+  const repo = repoTag.includes(':') ? repoTag.split(':')[0] : repoTag
+  const tag = repoTag.includes(':') ? repoTag.split(':')[1] : 'latest'
+  const full = `${repo}:${tag}`
+  IMAGE_DB[full] = {
+    repo,
+    tag,
+    id: 'sha256:' + randomId(12),
+    size: '128MB',
+    created: 'just now',
+    status: '本地提交',
+    cmd: c.command || '',
+    from: c.image,
+    fs: { ...(c.fs || {}) }
+  }
+  return { lines: [`sha256:${IMAGE_DB[full].id.replace(/^sha256:/, '')}`, `已从容器 ${c.name} 创建镜像 ${full}`], delay: 400 }
 }
 
 // --- docker logs ---
@@ -1363,6 +1632,133 @@ function dockerBuild(args) {
 
   buildFromDockerfile(name)
   return { lines, delay: 2000 }
+}
+
+function dockerHistory(args) {
+  const target = args.find(a => !a.startsWith('-'))
+  if (!target) return { type: 'error', lines: ['"docker history" requires exactly 1 argument.'] }
+  const key = ensureImage(target)
+  if (!key) return { type: 'error', lines: [`Error response from daemon: No such image: ${target}`] }
+  const img = IMAGE_DB[key]
+  const lines = [
+    'IMAGE          CREATED        CREATED BY                                      SIZE      COMMENT',
+    `${String(img.id || '').replace(/^sha256:/, '').slice(0, 12).padEnd(14, ' ')} ${String(img.created || 'just now').padEnd(14, ' ')} CMD ${String(img.cmd || 'sh').padEnd(38, ' ')} 0B`,
+    `${randomId(12).padEnd(14, ' ')} 2 weeks ago     COPY project files /app                       24MB`,
+    `${randomId(12).padEnd(14, ' ')} 2 weeks ago     RUN install dependencies                       86MB`,
+    `${randomId(12).padEnd(14, ' ')} 2 weeks ago     FROM ${img.from || img.repo}                              ${img.size || '0B'}`
+  ]
+  return { lines, delay: 200 }
+}
+
+function dockerSave(args) {
+  const outputIdx = args.findIndex(a => a === '-o' || a === '--output')
+  const output = outputIdx !== -1 ? args[outputIdx + 1] : (args.find(a => a.startsWith('--output=')) || '').replace(/^--output=/, '')
+  const images = args.filter((a, i) => !a.startsWith('-') && i !== outputIdx + 1)
+  if (!images.length) return { type: 'error', lines: ['"docker save" requires at least 1 image name.'] }
+  const missing = images.find(img => !ensureImage(img))
+  if (missing) return { type: 'error', lines: [`Error response from daemon: reference does not exist: ${missing}`] }
+  const file = output || 'stdout.tar'
+  HOST_PROJECT_FILES[file] = `Docker image archive (simulated): ${images.join(', ')}\n`
+  return { lines: [`已将镜像 ${images.join(', ')} 导出到模拟项目文件 ${file}`, '提示：真实 Docker 中可用 docker load -i <file> 导入。'], delay: 500 }
+}
+
+function dockerLoad(args) {
+  const inputIdx = args.findIndex(a => a === '-i' || a === '--input')
+  const input = inputIdx !== -1 ? args[inputIdx + 1] : (args.find(a => a.startsWith('--input=')) || '').replace(/^--input=/, '')
+  const file = input || 'stdin.tar'
+  const content = readHostFile(file)
+  if (input && content === undefined) return { type: 'error', lines: [`open ${file}: no such file or directory`] }
+  const repo = file && file !== 'stdin.tar' ? hostFileName(file).replace(/\.(tar|tgz|gz)$/i, '').replace(/[^a-zA-Z0-9_.-]/g, '-') || 'loaded-image' : 'loaded-image'
+  const full = `${repo}:latest`
+  IMAGE_DB[full] = { repo, tag: 'latest', id: 'sha256:' + randomId(12), size: '96MB', created: 'just now', status: '已导入' }
+  return { lines: [`Loaded image: ${full}`], delay: 500 }
+}
+
+function dockerImagePrune(args) {
+  const all = args.includes('-a') || args.includes('--all')
+  const used = new Set(CONTAINERS.map(c => c.image))
+  const removable = Object.keys(IMAGE_DB).filter(k => all ? !used.has(k) : !used.has(k) && !BASE_IMAGES[k])
+  for (const k of removable) delete IMAGE_DB[k]
+  return { lines: [
+    'Deleted Images:',
+    ...removable.map(k => `untagged: ${k}`),
+    '',
+    `Total reclaimed space: ${removable.length ? removable.length * 24 + 'MB' : '0B'}`
+  ], delay: 400 }
+}
+
+function dockerContainerPrune(args) {
+  const removable = CONTAINERS.filter(c => c.status !== 'running' && c.status !== 'paused')
+  for (const c of removable) {
+    const idx = CONTAINERS.indexOf(c)
+    if (idx !== -1) CONTAINERS.splice(idx, 1)
+  }
+  return { lines: [
+    'Deleted Containers:',
+    ...removable.map(c => c.shortId),
+    '',
+    `Total reclaimed space: ${removable.length ? removable.length * 8 + 'MB' : '0B'}`
+  ], delay: 400 }
+}
+
+function dockerSystem(args) {
+  const sub = args[0]
+  if (!sub || sub === 'help') return { lines: [
+    '',
+    'Usage:  docker system COMMAND',
+    '',
+    'Manage Docker',
+    '',
+    'Commands:',
+    '  df          Show docker disk usage',
+    '  prune       Remove unused data',
+    ''
+  ] }
+  if (sub === 'df') return dockerSystemDf(args.slice(1))
+  if (sub === 'prune') return dockerSystemPrune(args.slice(1))
+  return { type: 'error', lines: [`docker system: unknown command: ${sub}`] }
+}
+
+function dockerSystemDf(args) {
+  const verbose = args.includes('-v') || args.includes('--verbose')
+  const images = Object.keys(IMAGE_DB).length
+  const containers = CONTAINERS.length
+  const running = CONTAINERS.filter(c => c.status === 'running' || c.status === 'paused').length
+  const volumes = VOLUMES.length
+  const lines = [
+    'TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE',
+    `Images          ${String(images).padEnd(8, ' ')} ${String(new Set(CONTAINERS.map(c => c.image)).size).padEnd(8, ' ')} ${String(images * 96 + 'MB').padEnd(9, ' ')} ${Math.max(0, images - running) * 32}MB (simulated)`,
+    `Containers      ${String(containers).padEnd(8, ' ')} ${String(running).padEnd(8, ' ')} ${String(containers * 8 + 'MB').padEnd(9, ' ')} ${Math.max(0, containers - running) * 8}MB (simulated)`,
+    `Local Volumes   ${String(volumes).padEnd(8, ' ')} ${String(VOLUMES.filter(v => CONTAINERS.some(c => String(c.volume || '').startsWith(v.name + ':'))).length).padEnd(8, ' ')} ${String(volumes * 12 + 'MB').padEnd(9, ' ')} ${volumes * 4}MB (simulated)`,
+    'Build Cache     3        0         42MB      42MB'
+  ]
+  if (verbose) {
+    lines.push('', 'Images space usage:', 'REPOSITORY          TAG       SIZE      IN USE')
+    for (const [k, v] of Object.entries(IMAGE_DB)) lines.push(`${String(v.repo).padEnd(19, ' ')} ${String(v.tag).padEnd(9, ' ')} ${String(v.size).padEnd(9, ' ')} ${CONTAINERS.some(c => c.image === k) ? 'true' : 'false'}`)
+  }
+  return { lines, delay: 250 }
+}
+
+function dockerSystemPrune(args) {
+  const all = args.includes('-a') || args.includes('--all')
+  const oldContainers = CONTAINERS.length
+  dockerContainerPrune([])
+  const removedContainers = oldContainers - CONTAINERS.length
+  const oldImages = Object.keys(IMAGE_DB).length
+  dockerImagePrune(all ? ['-a'] : [])
+  const removedImages = oldImages - Object.keys(IMAGE_DB).length
+  const removableNets = NETWORKS.filter(n => !['bridge', 'host', 'none'].includes(n.name) && !CONTAINERS.some(c => c.network === n.name))
+  NETWORKS = NETWORKS.filter(n => !removableNets.includes(n))
+  return { lines: [
+    'Deleted Containers:',
+    `  ${removedContainers} stopped container(s)`,
+    'Deleted Networks:',
+    ...removableNets.map(n => `  ${n.name}`),
+    'Deleted Images:',
+    `  ${removedImages} unused image(s)`,
+    '',
+    `Total reclaimed space: ${removedContainers * 8 + removedImages * 24 + removableNets.length * 2}MB`
+  ], delay: 500 }
 }
 
 // --- docker volume ---

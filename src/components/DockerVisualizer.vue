@@ -1,12 +1,12 @@
-<template>
+﻿<template>
   <div class="viz-panel">
     <div class="viz-header">
       <span class="viz-title">
-        <el-icon><Share /></el-icon>
+        <n-icon><Share /></n-icon>
         Docker 拓扑视图
       </span>
       <span class="viz-sync" :class="{ flashing }">
-        <el-icon :class="{ spinning: flashing }"><RefreshRight /></el-icon>
+        <n-icon :class="{ spinning: flashing }"><RefreshRight /></n-icon>
         已同步
       </span>
     </div>
@@ -70,7 +70,7 @@
               <text :x="26" y="19" class="ctr-name">{{ short(c.name, 11) }}</text>
               <text :x="10" y="38" class="ctr-img">{{ short(c.image, 15) }}</text>
               <text v-if="c.ports" :x="10" :y="54" class="ctr-ports">⇅ {{ c.ports }}</text>
-              <text v-if="c.status !== 'running'" :x="c.w - 10" :y="19" class="ctr-state" text-anchor="end">exited</text>
+              <text v-if="c.status !== 'running'" :x="c.w - 10" :y="19" class="ctr-state" text-anchor="end">{{ c.status }}</text>
             </g>
           </g>
         </transition-group>
@@ -577,3 +577,4 @@ const g = computed(() => {
 .fx-enter-from { opacity: 0; transform: translateY(-6px); }
 .fx-leave-to { opacity: 0; }
 </style>
+
