@@ -77,15 +77,6 @@
                     </div>
                 </div>
 
-                <!-- 建议命令 -->
-                <div class="term-suggest" v-if="suggestions.length">
-                    <div class="suggest-label">试试这些命令：</div>
-                    <div class="suggest-chips">
-                        <button v-for="(s, i) in suggestions" :key="i" class="chip" @click="quickRun(s)">
-                            {{ s }}
-                        </button>
-                    </div>
-                </div>
             </div>
 
         </div>
@@ -93,8 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
-import { message, confirmDialog } from '@/utils/feedback'
+import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { executeCommand, getEnvironment } from '@/terminal/simulator'
 import type { DockerEnv } from '@/types'
 
@@ -111,17 +101,6 @@ interface TermEvent {
   ok: boolean
   time: string
 }
-
-const props = withDefaults(
-  defineProps<{
-    suggestions?: string[]
-    task?: string
-  }>(),
-  {
-    suggestions: () => [],
-    task: ''
-  }
-)
 
 const emit = defineEmits<{
   (e: 'command-executed', payload: { input: string; ok: boolean; errorStreak: number }): void
@@ -298,11 +277,6 @@ function autocomplete() {
     if (hit) current.value = hit
 }
 
-function quickRun(cmd: string) {
-    current.value = cmd
-    submit()
-}
-
 function resetEnv() {
     // 由父组件统一处理：清除本地缓存并调用 resetEnvironment，再触发同步
     emit('reset-environment')
@@ -321,13 +295,6 @@ const highlight = (line: string): string => {
 function focusInput() {
     inputRef.value && inputRef.value.focus()
 }
-
-watch(
-    () => props.suggestions,
-    () => {
-        focusInput()
-    },
-)
 
 onMounted(() => {
     // 初始化面板快照，使面板与引擎初始状态一致
@@ -585,42 +552,6 @@ onBeforeUnmount(() => {
 
 .typing-line {
     color: #8fa5bd;
-}
-
-.term-suggest {
-    padding: 10px 14px;
-    background: #202935;
-    border-top: 1px solid #2e3949;
-}
-
-.suggest-label {
-    color: #7d8fa3;
-    font-size: 12px;
-    margin-bottom: 8px;
-}
-
-.suggest-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.chip {
-    background: rgba(36, 150, 237, 0.12);
-    border: 1px solid rgba(36, 150, 237, 0.35);
-    color: #7db9ff;
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.chip:hover {
-    background: rgba(36, 150, 237, 0.28);
-    color: #fff;
-    border-color: #2496ed;
 }
 
 /* 移动端 */

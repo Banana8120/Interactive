@@ -1,35 +1,46 @@
-# Docker + Git + MySQL 交互式学习教程
+# Docker + Git + MySQL + JVM + JavaScript 交互式 Playground
 
-一个纯前端的**交互式技术学习网站**。Docker/Git/MySQL 无需安装真实环境，直接在浏览器中输入真实风格命令，由内置模拟引擎即时反馈。
+一个纯前端的交互式 Playground。无需安装 Docker、Git、MySQL、Java 或 JavaScript 运行环境，直接在浏览器中使用模拟终端或代码编辑器，由内置模拟引擎即时反馈。
 
-> 本项目完全在浏览器内模拟 Docker / Git / MySQL 行为，**不依赖任何真实后端环境**，可离线运行，适合新手入门与课堂演示。
+> 本项目完全在浏览器内模拟 Docker / Git / MySQL / JVM / JavaScript 行为，**不依赖任何真实后端环境**，可离线运行。
 
 ---
 
 ## ✨ 功能特性
 
-### Docker 学习模块
-- **完整知识体系**：8 大章节，覆盖「走进 Docker → 镜像 → 容器 → Dockerfile → 数据卷 → 网络 → Compose → 实战」。
-- **模拟终端实操**：输入 `docker pull` / `docker run` / `docker ps` 等真实命令，即时查看模拟输出。
-- **拓扑可视化面板**：右侧悬浮抽屉实时展示镜像、容器、数据卷、网络拓扑，命令执行同步刷新。
-- **当前练习**：每节配套练习任务，自动检测完成状态，卡住时给出分级提示。
+### Docker Playground
+- 输入 `docker pull`、`docker run`、`docker ps` 等命令并即时查看模拟输出。
+- 右侧拓扑抽屉实时展示镜像、容器、数据卷和网络。
+- 模拟状态自动保存，支持一键重置。
 
-### Git 学习模块
-- **参考 Gitee Git 大全**：8 大章节，覆盖「入门与配置 → 第一次提交 → 暂存区 → 撤销回退 → 分支 → 远程 → 标签 → 进阶」。
-- **模拟仓库实操**：`git init` / `git commit` / `git branch` / `git merge` / `git rebase` 等命令真实可用。
-- **仓库状态面板**：悬浮抽屉展示本地/远程、工作区/暂存区/版本库、分支、提交、标签、Stash 等。
-- **智能纠错与提示**：错误命令自动分析，连续出错时触发「卡住」线索，并逐条展开分级提示。
+### Git Playground
+- 支持 `git init`、`git commit`、`git branch`、`git merge`、`git rebase` 等常用命令。
+- 状态抽屉展示工作区、暂存区、提交、分支、远程、标签和 stash。
+- 仓库状态自动保存，刷新后继续操作。
 
-### MySQL 学习模块
-- **SQL 入门路径**：覆盖「认识 MySQL → 数据库与表 → 插入查询 → 修改删除」。
-- **教学级 SQL 解析器**：支持 `CREATE DATABASE` / `USE` / `CREATE TABLE` / `INSERT` / `SELECT` / `UPDATE` / `DELETE` 等核心语句。
-- **数据面板联动**：悬浮抽屉实时展示当前数据库、表结构、字段约束和行数据。
-- **智能命令提示**：根据当前库表状态推荐可执行 SQL，并支持 Tab 补全。
+### MySQL Playground
+- 支持 `CREATE DATABASE`、`USE`、`CREATE TABLE`、`INSERT`、`SELECT`、`UPDATE`、`DELETE` 等常用语句。
+- 数据抽屉实时展示当前数据库、表结构、字段约束和行数据。
+- 支持命令历史、智能补全、状态保存和重置。
+
+### JVM 内存 Playground
+- 在左侧编写简化 Java，右侧即时查看执行到光标行时的内存状态。
+- 方法区存储类信息、常量和静态变量，堆内存存储对象与数组。
+- 每个命名线程拥有独立虚拟机栈，栈帧包含局部变量表和操作数栈。
+- 支持手动 GC 和堆分配压力触发的标记-清除 GC，静态引用、局部变量与操作数引用作为根节点。
+- 右侧内存视图实时展示容量、栈帧、引用关系和最近一次垃圾回收结果。
+
+### JavaScript 执行上下文 Playground
+- 在左侧编写简化 JavaScript，右侧即时查看执行到光标行时的调用栈、作用域和堆内存。
+- 支持 `let`、`const`、`var`、对象/数组字面量、函数声明、函数调用、属性写入和数组下标写入。
+- 对象、数组和函数对象分配在堆中，变量绑定保存基础值或堆引用。
+- 函数调用会创建新的执行上下文和函数作用域，传入对象或数组时保留引用语义。
+- 不执行真实 JS 代码，不接入 DOM、Node.js API、Promise 或事件循环。
 
 ### 通用能力
-- **进度持久化**：学习进度、练习完成、测验结果、各课时模拟环境状态均缓存在 `localStorage`，刷新不丢失。
-- **模块内进度提示**：Docker、Git、MySQL 各自记录完成度、最近学习位置和下一步推荐。
-- **响应式 UI**：基于 Naive UI，配合 xicons 图标，支持明暗内容展示，适配桌面浏览器。
+- **纯浏览器模拟**：不执行真实 shell 命令，也不连接本机或远程服务。
+- **独立状态持久化**：五个 Playground 分别使用 `localStorage` 保存模拟状态或编辑器源码。
+- **响应式 UI**：基于 Naive UI 和 xicons，适配桌面与移动浏览器。
 
 ---
 
@@ -41,9 +52,9 @@
 | 构建 | Vite 5 |
 | 语言 | TypeScript 5.6 |
 | UI 组件 | Naive UI + xicons（@vicons/ionicons5） |
-| 状态管理 | Pinia |
 | 路由 | Vue Router 4（hash 模式） |
-| 模拟引擎 | 纯前端 JS/TS 模拟（无真实 Docker/Git/MySQL 依赖） |
+| 模拟引擎 | 纯前端 JS/TS 模拟（无真实 Docker/Git/MySQL/JVM/JavaScript runtime 依赖） |
+| 测试 | Vitest |
 
 ---
 
@@ -55,13 +66,11 @@ docker-tutorial/
 │   └── favicon.svg              # 站点 Logo（Docker 鲸鱼 + Git 徽标）
 ├── src/
 │   ├── assets/                  # 全局样式
-│   ├── components/              # 复用组件（终端、状态面板、任务面板、可视化等）
-│   ├── data/                    # 课程数据（Docker / Git / MySQL）
+│   ├── components/              # 终端、代码编辑器、状态面板与可视化
 │   ├── router/                  # 路由配置（hash 模式）
-│   ├── stores/                  # Pinia 状态（各模块学习进度）
-│   ├── terminal/                # Docker / Git / MySQL 模拟引擎
-│   ├── types/                   # 全局 TypeScript 类型定义
-│   ├── views/                   # 页面视图（首页、章节页、课时页等）
+│   ├── terminal/                # Docker / Git / MySQL / JVM / JavaScript 模拟引擎与测试
+│   ├── types/                   # 模拟状态 TypeScript 类型
+│   ├── views/                   # 五个 Playground 页面
 │   ├── App.vue                  # 根组件（导航 + 布局）
 │   ├── main.ts                  # 入口
 │   └── env.d.ts                 # 类型声明
@@ -97,6 +106,11 @@ npm run type-check
 npx vue-tsc --noEmit
 ```
 
+### 单元测试
+```bash
+npm run test
+```
+
 ### 生产构建
 ```bash
 npm run build
@@ -110,18 +124,11 @@ npm run preview
 
 ---
 
-## 📚 学习路径
-
-1. 打开首页，选择 **Docker 学习**、**Git 学习** 或 **MySQL 学习**。
-2. 按章节顺序阅读讲解，在「模拟终端」中敲入对应命令或 SQL。
-3. 完成每节的「当前练习」即可自动记录进度，首页会推荐下一节。
-
----
-
 ## ⚙️ 数据与状态说明
 
-- 所有模拟环境状态和学习进度均保存在浏览器 `localStorage`，清除浏览器数据会重置进度。
-- 进入任意课时会自动恢复该课时缓存的模拟环境；点击「重置练习」可清空缓存回到初始状态。
+- Docker、Git、MySQL 的模拟环境以及 JVM、JavaScript 编辑器源码分别保存在浏览器 `localStorage`。
+- 切换模块或刷新页面会自动恢复对应 Playground 状态。
+- 点击终端或编辑器的重置按钮可清空当前模块缓存并恢复初始状态。
 
 ---
 
@@ -148,4 +155,4 @@ npm run build          # 产物输出到 dist/
 
 ## 📄 许可
 
-本项目用于学习演示，课程内容参考《Docker 从入门到实践》、Gitee Git 大全与 MySQL/SQL 入门公开知识体系。
+本项目用于浏览器内命令模拟与交互展示。

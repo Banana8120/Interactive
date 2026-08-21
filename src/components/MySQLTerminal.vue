@@ -76,22 +76,11 @@
       </div>
     </div>
 
-    <div class="term-suggest" v-if="suggestions.length">
-      <div class="suggest-label">本练习建议命令：</div>
-      <div class="suggest-chips">
-        <button
-          v-for="(s, i) in suggestions"
-          :key="i"
-          class="chip"
-          @click="quickRun(s)"
-        >{{ s }}</button>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { executeMySqlCommand, getMySqlState } from '@/terminal/mysqlSimulator'
 
 interface TermBlock {
@@ -103,16 +92,6 @@ interface TermBlock {
 }
 
 type ExecuteResult = ReturnType<typeof executeMySqlCommand>
-
-interface Props {
-  suggestions?: string[]
-  task?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  suggestions: () => [],
-  task: ''
-})
 
 const emit = defineEmits<{
   (e: 'command-executed', payload: { input: string; ok: boolean; errorStreak: number }): void
@@ -150,7 +129,6 @@ const baseCommands = computed(() => {
     ...tables.map((table) => `SHOW TABLES;`)
   ]
   return uniq([
-    ...props.suggestions,
     'mysql --version',
     'mysql -u root -p',
     'SHOW DATABASES;',
@@ -174,7 +152,7 @@ const baseCommands = computed(() => {
 
 const smartSuggestions = computed(() => {
   const base = current.value.trim().toLowerCase()
-  if (!base) return props.suggestions.slice(0, 5)
+  if (!base) return []
   return baseCommands.value
     .filter((cmd) => cmd.toLowerCase().startsWith(base) && cmd.toLowerCase() !== base)
     .slice(0, 6)
@@ -272,11 +250,6 @@ function applySuggestion(cmd: string) {
   focusInput()
 }
 
-function quickRun(cmd: string) {
-  current.value = cmd
-  submit()
-}
-
 function resetEnv() {
   emit('reset-environment')
 }
@@ -293,8 +266,6 @@ const highlight = (line: string): string => {
 function focusInput() {
   if (inputRef.value) inputRef.value.focus()
 }
-
-watch(() => props.suggestions, () => { focusInput() })
 
 onMounted(() => {
   history.value.push({
@@ -494,42 +465,6 @@ onMounted(() => {
 .smart-chip:hover {
   background: rgba(73, 210, 229, 0.18);
   color: #fff;
-}
-
-.term-suggest {
-  padding: 10px 14px;
-  background: #1a2b3b;
-  border-top: 1px solid #28465d;
-}
-
-.suggest-label {
-  color: #86a7b9;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.suggest-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  background: rgba(0, 163, 196, 0.13);
-  border: 1px solid rgba(0, 163, 196, 0.38);
-  color: #9eeaf6;
-  font-size: 12px;
-  font-family: inherit;
-  padding: 4px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.chip:hover {
-  background: rgba(0, 163, 196, 0.28);
-  color: #fff;
-  border-color: #00a3c4;
 }
 
 .hl-sql { color: #8fe5ff; font-weight: 700; }

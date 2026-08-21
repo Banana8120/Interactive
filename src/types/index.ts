@@ -1,75 +1,4 @@
-/* ================= Docker 类型 ================= */
-
-export interface ContentBlock {
-  type: string
-  html?: string
-  lang?: string
-  code?: string
-  title?: string
-  text?: string
-  headers?: string[]
-  rows?: string[][]
-  items?: string[]
-  // practice 类型内容块的可选字段
-  desc?: string
-  check?: (env?: any) => boolean
-  successMsg?: string
-  hints?: string[]
-  commands?: string[]
-  hideCopy?: boolean
-}
-
-export interface Quiz {
-  question: string
-  options: string[]
-  answer: number
-  explain: string
-}
-
-export interface Practice {
-  title: string
-  desc: string
-  commands: string[]
-  // 校验函数：传入当前模拟环境，返回是否通过（env 可省略，兼容无参写法）
-  check: (env?: DockerEnv) => boolean
-  successMsg?: string
-  hints?: string[]
-}
-
-export interface TerminalConfig {
-  enabled: boolean
-  task: string
-  commands: string[]
-}
-
-export interface Lesson {
-  id: string
-  title: string
-  concept: string
-  content: ContentBlock[]
-  terminal?: TerminalConfig
-  practice?: Practice
-  quiz?: Quiz[]
-}
-
-export interface Chapter {
-  id: string
-  index: string
-  title: string
-  icon: string
-  color: string
-  minutes: number
-  lessonsCount: number
-  description: string
-  lessons: Lesson[]
-}
-
-export interface CourseStats {
-  chapters: number
-  lessons: number
-  practices: number
-  quizzes: number
-}
+/* ================= Docker 模拟状态 ================= */
 
 export interface DockerImage {
   id: string
@@ -108,52 +37,7 @@ export interface DockerEnv {
   history: string[]
 }
 
-/* ================= Git 类型 ================= */
-
-export interface GitPractice {
-  title: string
-  desc: string
-  commands: string[]
-  // 校验函数（Git 练习多为无参写法，内部直接读取 getGitState()）
-  check: (env?: GitState) => boolean
-  successMsg?: string
-  hints?: string[]
-}
-
-export interface GitTerminalConfig {
-  enabled: boolean
-  task: string
-  commands: string[]
-}
-
-export interface GitQuiz {
-  question: string
-  options: string[]
-  answer: number
-  explain: string
-}
-
-export interface GitLesson {
-  id: string
-  title: string
-  concept: string
-  content: ContentBlock[]
-  terminal?: GitTerminalConfig
-  practice?: GitPractice
-  quiz?: GitQuiz[]
-}
-
-export interface GitChapter {
-  id: string
-  index: string
-  title: string
-  icon: string
-  color: string
-  minutes: number
-  lessonsCount?: number
-  description: string
-  lessons: GitLesson[]
-}
+/* ================= Git 模拟状态 ================= */
 
 export interface GitCommit {
   hash: string
@@ -200,7 +84,7 @@ export interface GitState {
   bisectState?: any
 }
 
-/* ================= MySQL 类型 ================= */
+/* ================= MySQL 模拟状态 ================= */
 
 export type MySqlValue = string | number | null
 
@@ -237,53 +121,182 @@ export interface MySqlState {
   history: string[]
 }
 
-export interface MySqlPractice {
-  title: string
-  desc: string
-  commands: string[]
-  check: (env?: MySqlState) => boolean
-  successMsg?: string
-  hints: string[]
+/* ================= JVM 模拟状态 ================= */
+
+export type JvmValue =
+  | { kind: 'number'; value: number }
+  | { kind: 'boolean'; value: boolean }
+  | { kind: 'string'; value: string }
+  | { kind: 'null'; value: null }
+  | { kind: 'reference'; value: string }
+
+export interface JvmClassInfo {
+  name: string
+  size: number
+  constants: Record<string, JvmValue>
+  staticVariables: Record<string, JvmValue>
 }
 
-export interface MySqlTerminalConfig {
-  enabled: boolean
-  task: string
-  commands: string[]
-}
-
-export interface MySqlQuiz {
-  question: string
-  options: string[]
-  answer: number
-  explain: string
-}
-
-export interface MySqlLesson {
+export interface JvmStackFrame {
   id: string
-  title: string
-  concept: string
-  content: ContentBlock[]
-  terminal?: MySqlTerminalConfig
-  practice?: MySqlPractice
-  quiz?: MySqlQuiz[]
+  className: string
+  methodName: string
+  size: number
+  localVariables: Record<string, JvmValue>
+  operandStack: JvmValue[]
 }
 
-export interface MySqlChapter {
+export interface JvmThread {
   id: string
-  index: string
-  title: string
-  icon: string
-  color: string
-  minutes: number
-  lessonsCount?: number
-  description: string
-  lessons: MySqlLesson[]
+  name: string
+  frames: JvmStackFrame[]
 }
 
-export interface MySqlCourseStats {
-  chapters: number
-  lessons: number
-  practices: number
-  quizzes: number
+export interface JvmHeapObject {
+  kind: 'object'
+  id: string
+  className: string
+  size: number
+  fields: Record<string, JvmValue>
+}
+
+export type JvmArrayElementType = 'ref' | 'int' | 'long' | 'float' | 'double' | 'boolean' | 'string'
+
+export interface JvmHeapArray {
+  kind: 'array'
+  id: string
+  elementType: JvmArrayElementType
+  length: number
+  elementSize: number
+  size: number
+  elements: JvmValue[]
+}
+
+export type JvmHeapEntry = JvmHeapObject | JvmHeapArray
+
+export interface JvmGcStats {
+  run: number
+  trigger: 'manual' | 'allocation'
+  scanned: number
+  survived: number
+  collected: number
+  freed: number
+}
+
+export interface JvmState {
+  capacities: {
+    methodArea: number
+    heap: number
+    stackPerThread: number
+  }
+  methodArea: {
+    classes: Record<string, JvmClassInfo>
+  }
+  heap: {
+    entries: Record<string, JvmHeapEntry>
+  }
+  threads: Record<string, JvmThread>
+  activeThreadId: string | null
+  counters: {
+    thread: number
+    frame: number
+    object: number
+    array: number
+    gc: number
+  }
+  lastGc: JvmGcStats | null
+}
+
+/* ================= JavaScript 模拟状态 ================= */
+
+export type JavaScriptValue =
+  | { kind: 'number'; value: number }
+  | { kind: 'boolean'; value: boolean }
+  | { kind: 'string'; value: string }
+  | { kind: 'null'; value: null }
+  | { kind: 'undefined'; value: null }
+  | { kind: 'reference'; value: string }
+
+export type JavaScriptDeclarationKind = 'var' | 'let' | 'const' | 'param' | 'function'
+
+export interface JavaScriptBinding {
+  name: string
+  declaration: JavaScriptDeclarationKind
+  mutable: boolean
+  line: number
+  value: JavaScriptValue
+}
+
+export type JavaScriptScopeKind = 'global' | 'function'
+
+export interface JavaScriptScopeRecord {
+  id: string
+  kind: JavaScriptScopeKind
+  name: string
+  bindings: Record<string, JavaScriptBinding>
+}
+
+export type JavaScriptExecutionContextKind = 'global' | 'function'
+
+export interface JavaScriptExecutionContext {
+  id: string
+  kind: JavaScriptExecutionContextKind
+  name: string
+  line: number
+  activeLine: number
+  scopeIds: string[]
+}
+
+export interface JavaScriptHeapObject {
+  kind: 'object'
+  id: string
+  label: string
+  size: number
+  properties: Record<string, JavaScriptValue>
+}
+
+export interface JavaScriptHeapArray {
+  kind: 'array'
+  id: string
+  label: string
+  size: number
+  elements: JavaScriptValue[]
+  properties: Record<string, JavaScriptValue>
+}
+
+export interface JavaScriptHeapFunction {
+  kind: 'function'
+  id: string
+  name: string
+  params: string[]
+  line: number
+  size: number
+  closureScopeIds: string[]
+}
+
+export type JavaScriptHeapEntry = JavaScriptHeapObject | JavaScriptHeapArray | JavaScriptHeapFunction
+
+export interface JavaScriptReferenceEdge {
+  fromKind: 'scope' | 'heap'
+  fromId: string
+  fromLabel: string
+  slot: string
+  toId: string
+}
+
+export interface JavaScriptState {
+  callStack: JavaScriptExecutionContext[]
+  scopes: Record<string, JavaScriptScopeRecord>
+  heap: {
+    entries: Record<string, JavaScriptHeapEntry>
+  }
+  activeContextId: string | null
+  counters: {
+    context: number
+    scope: number
+    object: number
+    array: number
+    function: number
+  }
+  references: JavaScriptReferenceEdge[]
 }

@@ -49,9 +49,13 @@ const REMOTE_IMAGES = {
   'ubuntu:latest': { size: '78MB' }
 }
 
-// 课程内置的“基准镜像库”快照：rmi 会从 IMAGE_DB 删除镜像，
-// 但教程的镜像属于课程资源，进入每个课时时应恢复，避免上一课时删除的镜像污染后续课时。
+// Playground 的基准镜像库快照，用于完整重置模拟环境。
 const BASE_IMAGES = JSON.parse(JSON.stringify(IMAGE_DB))
+
+function replaceImageDatabase(images = BASE_IMAGES) {
+  for (const key of Object.keys(IMAGE_DB)) delete IMAGE_DB[key]
+  for (const [key, image] of Object.entries(images)) IMAGE_DB[key] = { ...image }
+}
 
 // ---------------------------------------------------------------------------
 // 镜像内模拟文件系统：repo -> { 绝对路径: 内容 }
@@ -158,6 +162,7 @@ function ensureImage(ref) {
 }
 
 export function resetEnvironment() {
+  replaceImageDatabase()
   CONTAINERS = []
   VOLUMES = []
   NETWORKS = [
@@ -172,20 +177,21 @@ export function resetEnvironment() {
 }
 
 // ---------------------------------------------------------------------------
-// 本地持久化：按课时缓存 Docker 模拟状态
+// 本地持久化：按 Playground 作用域缓存 Docker 模拟状态
 // ---------------------------------------------------------------------------
 
 const DOCKER_STORAGE_PREFIX = 'docker-sim-state-v1'
 
-function dockerStorageKey(lessonId) {
-  return `${DOCKER_STORAGE_PREFIX}-${lessonId}`
+function dockerStorageKey(workspaceId) {
+  return `${DOCKER_STORAGE_PREFIX}-${workspaceId}`
 }
 
-export function saveDockerState(lessonId) {
-  if (!lessonId) return false
+export function saveDockerState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
     const payload = {
+      images: IMAGE_DB,
       containers: CONTAINERS,
       volumes: VOLUMES,
       networks: NETWORKS,
@@ -197,21 +203,22 @@ export function saveDockerState(lessonId) {
         ports: PORTS_COUNTER
       }
     }
-    localStorage.setItem(dockerStorageKey(lessonId), JSON.stringify(payload))
+    localStorage.setItem(dockerStorageKey(workspaceId), JSON.stringify(payload))
     return true
   } catch (e) {
     return false
   }
 }
 
-export function loadDockerState(lessonId) {
-  if (!lessonId) return false
+export function loadDockerState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    const raw = localStorage.getItem(dockerStorageKey(lessonId))
+    const raw = localStorage.getItem(dockerStorageKey(workspaceId))
     if (!raw) return false
     const saved = JSON.parse(raw)
     if (saved && typeof saved === 'object') {
+      replaceImageDatabase(saved.images && typeof saved.images === 'object' ? saved.images : BASE_IMAGES)
       CONTAINERS = Array.isArray(saved.containers) ? saved.containers : []
       VOLUMES = Array.isArray(saved.volumes) ? saved.volumes : []
       NETWORKS = Array.isArray(saved.networks) ? saved.networks : [
@@ -233,25 +240,11 @@ export function loadDockerState(lessonId) {
   }
 }
 
-/**
- * 恢复课程基准镜像库（被 rmi 删除的内置镜像会在进入新课时重新可用）。
- * 注意：仅补充缺失的基准镜像，不会移除用户在本课时内自行 pull 的镜像。
- */
-export function restoreBaseImages() {
-  try {
-    for (const k of Object.keys(BASE_IMAGES)) {
-      if (!IMAGE_DB[k]) IMAGE_DB[k] = { ...BASE_IMAGES[k] }
-    }
-  } catch (e) {
-    /* ignore */
-  }
-}
-
-export function clearDockerState(lessonId) {
-  if (!lessonId) return false
+export function clearDockerState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.removeItem(dockerStorageKey(lessonId))
+    localStorage.removeItem(dockerStorageKey(workspaceId))
     return true
   } catch (e) {
     return false
@@ -553,7 +546,7 @@ export function executeCommand(rawInput) {
     cat: (args) => runCat(args),
     clear: () => ({ type: 'clear' }),
     echo: (args) => ({ lines: [args.join(' ')] }),
-    exit: () => ({ lines: ['(学习环境为模拟终端，无需退出。可继续输入命令或通过侧边栏切换章节。)'] })
+    exit: () => ({ lines: ['(当前为浏览器内模拟终端，无需退出，可继续输入命令。)'] })
   }
 
   if (builtins[cmd]) {

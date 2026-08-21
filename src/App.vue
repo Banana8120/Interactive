@@ -3,9 +3,9 @@
         <n-layout-header class="app-header" style="height: 56px">
             <div class="header-inner">
                 <router-link to="/" class="brand">
-                    <img src="/favicon.svg" alt="交互式学习教程" class="brand-logo" />
+                    <img src="/favicon.svg" alt="模拟终端 Playground" class="brand-logo" />
                     <span class="brand-text">
-                        <span class="brand-sub">交互式学习教程</span>
+                        <span class="brand-sub">模拟终端 Playground</span>
                     </span>
                 </router-link>
 
@@ -19,6 +19,8 @@
                             active: isActive(item.path),
                             'git-active': item.kind === 'git' && isActive(item.path),
                             'mysql-active': item.kind === 'mysql' && isActive(item.path),
+                            'jvm-active': item.kind === 'jvm' && isActive(item.path),
+                            'javascript-active': item.kind === 'javascript' && isActive(item.path),
                         }"
                     >
                         <n-icon><component :is="item.icon" /></n-icon>
@@ -26,24 +28,6 @@
                     </router-link>
                 </nav>
 
-                <div class="header-progress">
-                    <n-tooltip placement="bottom">
-                        <template #trigger>
-                            <n-progress
-                                type="circle"
-                                :percentage="activeProgress.percent"
-                                :style="{ width: '40px' }"
-                                :stroke-width="5"
-                                :color="activeProgress.color"
-                                :show-indicator="false"
-                            />
-                        </template>
-                        {{ activeProgress.label }} 学习已完成 {{ activeProgress.percent }}%
-                    </n-tooltip>
-                    <span class="progress-label" :style="{ color: activeProgress.color }" v-if="!isMobile">
-                        {{ activeProgress.percent }}%
-                    </span>
-                </div>
             </div>
         </n-layout-header>
 
@@ -55,25 +39,16 @@
             </router-view>
         </n-layout-content>
 
-        <n-layout-footer class="app-footer" style="height: 44px">
-            <span>交互式学习教程 · 终端与预览均为浏览器内模拟环境</span>
-        </n-layout-footer>
     </n-layout>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useProgressStore } from '@/stores/progress'
-import { useGitProgressStore } from '@/stores/gitProgress'
-import { useMySqlProgressStore } from '@/stores/mysqlProgress'
 
 const route = useRoute()
-const store = useProgressStore()
-const gitStore = useGitProgressStore()
-const mysqlStore = useMySqlProgressStore()
 
-type NavKind = 'docker' | 'git' | 'mysql'
+type NavKind = 'docker' | 'git' | 'mysql' | 'jvm' | 'javascript'
 
 interface NavItem {
   path: string
@@ -83,36 +58,24 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-    { path: '/', label: 'Docker 学习', icon: 'HomeFilled', kind: 'docker' },
-    { path: '/git', label: 'Git 学习', icon: 'Share', kind: 'git' },
-    { path: '/mysql', label: 'MySQL 学习', icon: 'Database', kind: 'mysql' },
+    { path: '/', label: 'Docker', icon: 'Monitor', kind: 'docker' },
+    { path: '/git', label: 'Git', icon: 'Share', kind: 'git' },
+    { path: '/mysql', label: 'MySQL', icon: 'Database', kind: 'mysql' },
+    { path: '/jvm', label: 'JVM', icon: 'Cpu', kind: 'jvm' },
+    { path: '/javascript', label: 'JavaScript', icon: 'JavaScriptIcon', kind: 'javascript' },
 ]
 
 const isGitModule = computed(() => route.path.startsWith('/git'))
 const isMySqlModule = computed(() => route.path.startsWith('/mysql'))
-
-const activeProgress = computed(() => {
-    if (isGitModule.value) return { label: 'Git', percent: gitStore.overallPercent, color: '#F05032' }
-    if (isMySqlModule.value) return { label: 'MySQL', percent: mysqlStore.overallPercent, color: '#00618A' }
-    return { label: 'Docker', percent: store.overallPercent, color: '#2496ED' }
-})
+const isJvmModule = computed(() => route.path.startsWith('/jvm'))
+const isJavaScriptModule = computed(() => route.path.startsWith('/javascript'))
 
 const mainClass = computed(() => ({
     'git-main': isGitModule.value,
     'mysql-main': isMySqlModule.value,
+    'jvm-main': isJvmModule.value,
+    'javascript-main': isJavaScriptModule.value,
 }))
-
-const isMobile = ref(false)
-const checkMobile = () => {
-    isMobile.value = window.innerWidth <= 768
-}
-
-onMounted(() => {
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-})
-
-onBeforeUnmount(() => window.removeEventListener('resize', checkMobile))
 
 const isActive = (path: string) => (path === '/' ? route.path === '/' : route.path.startsWith(path))
 </script>
@@ -133,7 +96,7 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
 }
 
 .header-inner {
-    max-width: 1280px;
+    max-width: 1200px;
     margin: 0 auto;
     height: 100%;
     display: flex;
@@ -207,27 +170,21 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
     color: #00618a;
 }
 
-.header-progress {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
+.nav-link.jvm-active.active {
+    background: rgba(126, 74, 184, 0.11);
+    color: #7e4ab8;
 }
 
-.progress-label {
-    font-size: 13px;
-    color: #1b6bb3;
-    font-weight: 600;
-}
-
-.progress-label.git-label {
-    color: #f05032;
+.nav-link.javascript-active.active {
+    background: rgba(224, 190, 42, 0.16);
+    color: #8a7400;
 }
 
 .app-main {
     padding: 24px 20px 40px;
     background: var(--docker-bg);
     overflow-y: auto;
+    min-height: calc(100vh - 56px);
 }
 
 .app-main.git-main {
@@ -238,16 +195,12 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
     background: #f0fbff;
 }
 
-.app-footer {
-    background: #fff;
-    border-top: 1px solid var(--border-light);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #909399;
-    font-size: 12.5px;
-    padding: 0 16px;
-    text-align: center;
+.app-main.jvm-main {
+    background: #f8f3fc;
+}
+
+.app-main.javascript-main {
+    background: #fff9df;
 }
 
 @media (max-width: 768px) {
@@ -275,12 +228,6 @@ const isActive = (path: string) => (path === '/' ? route.path === '/' : route.pa
         padding: 16px 12px 24px;
     }
 
-    .app-footer {
-        font-size: 11px;
-        height: auto !important;
-        min-height: 40px;
-        padding: 8px;
-    }
 }
 </style>
 

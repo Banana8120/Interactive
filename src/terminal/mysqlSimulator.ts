@@ -1,7 +1,7 @@
 /**
- * MySQL 教学模拟引擎 —— 纯浏览器内存模拟，不连接真实数据库。
+ * MySQL 模拟引擎 —— 纯浏览器内存模拟，不连接真实数据库。
  *
- * 目标是覆盖入门课程中的核心 SQL 动作，并让右侧数据面板能实时反映：
+ * 覆盖常用 SQL 动作，并让右侧数据面板能实时反映：
  * 数据库、数据表、字段、行数据与当前 USE 的数据库。
  */
 
@@ -90,26 +90,26 @@ export function resetMySqlEnvironment(): MySqlState {
   return state
 }
 
-function storageKey(lessonId: string) {
-  return `${STORAGE_KEY_PREFIX}-${lessonId}`
+function storageKey(workspaceId: string) {
+  return `${STORAGE_KEY_PREFIX}-${workspaceId}`
 }
 
-export function saveMySqlState(lessonId: string): boolean {
-  if (!lessonId) return false
+export function saveMySqlState(workspaceId: string): boolean {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.setItem(storageKey(lessonId), JSON.stringify(state))
+    localStorage.setItem(storageKey(workspaceId), JSON.stringify(state))
     return true
   } catch (e) {
     return false
   }
 }
 
-export function loadMySqlState(lessonId: string): boolean {
-  if (!lessonId) return false
+export function loadMySqlState(workspaceId: string): boolean {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    const raw = localStorage.getItem(storageKey(lessonId))
+    const raw = localStorage.getItem(storageKey(workspaceId))
     if (!raw) return false
     const saved = JSON.parse(raw) as Partial<MySqlState>
     if (saved && typeof saved === 'object' && saved.databases) {
@@ -122,11 +122,11 @@ export function loadMySqlState(lessonId: string): boolean {
   }
 }
 
-export function clearMySqlState(lessonId: string): boolean {
-  if (!lessonId) return false
+export function clearMySqlState(workspaceId: string): boolean {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.removeItem(storageKey(lessonId))
+    localStorage.removeItem(storageKey(workspaceId))
     return true
   } catch (e) {
     return false

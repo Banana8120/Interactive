@@ -9,8 +9,8 @@
 const VERSION = 'git version 2.45.1.windows.1'
 
 const INITIAL_FILES = {
-  'README.md': '# Git 学习项目\n\n这是一个用于 Git 交互式学习的示例仓库。\n',
-  'index.html': '<!DOCTYPE html>\n<html>\n<head><title>Git 学习</title></head>\n<body>\n  <h1>Hello, Git!</h1>\n</body>\n</html>\n',
+  'README.md': '# Git Playground\n\n这是模拟终端中的示例仓库。\n',
+  'index.html': '<!DOCTYPE html>\n<html>\n<head><title>Git Playground</title></head>\n<body>\n  <h1>Hello, Git!</h1>\n</body>\n</html>\n',
   'app.js': "// 应用入口\nconsole.log('hello git')\n"
 }
 
@@ -68,14 +68,14 @@ export function executeGitCommand(rawInput) {
     if (cmd === 'echo') return runEcho(parts.slice(1))
     return {
       type: 'error',
-      lines: [`bash: ${cmd}: command not found`, '提示：本模块是 Git 学习环境，请以 "git" 开头的命令操作，例如 git status。']
+      lines: [`bash: ${cmd}: command not found`, '提示：当前是 Git 模拟环境，请以 "git" 开头输入命令，例如 git status。']
     }
   }
   return runGit(parts.slice(1))
 }
 
 /**
- * echo 内置命令：支持重定向写入/追加文件（模拟真实 shell，供练习“修改文件”使用）
+ * echo 内置命令：支持重定向写入或追加文件。
  *   echo "hello" >  app.js   覆盖写
  *   echo "hello" >> app.js   追加写
  *   echo hello               纯输出
@@ -105,7 +105,7 @@ export function getGitState() {
 }
 
 export function resetGitEnvironment() {
-  // 保留 --global 身份配置（真实 Git 中存于 ~/.gitconfig，跨仓库、跨课时有效）
+  // 保留 --global 身份配置（真实 Git 中存于 ~/.gitconfig，跨仓库有效）
   const keepConfig = state ? state.config : null
   state = createState()
   if (keepConfig && keepConfig.user) {
@@ -115,31 +115,31 @@ export function resetGitEnvironment() {
 }
 
 // ---------------------------------------------------------------------------
-// 本地持久化：按课时缓存仓库状态，刷新/切回页面后可恢复
+// 本地持久化：按 Playground 作用域缓存仓库状态
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY_PREFIX = 'git-sim-state-v1'
 
-function storageKey(lessonId) {
-  return `${STORAGE_KEY_PREFIX}-${lessonId}`
+function storageKey(workspaceId) {
+  return `${STORAGE_KEY_PREFIX}-${workspaceId}`
 }
 
-export function saveGitState(lessonId) {
-  if (!lessonId) return false
+export function saveGitState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.setItem(storageKey(lessonId), JSON.stringify(state))
+    localStorage.setItem(storageKey(workspaceId), JSON.stringify(state))
     return true
   } catch (e) {
     return false
   }
 }
 
-export function loadGitState(lessonId) {
-  if (!lessonId) return false
+export function loadGitState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    const raw = localStorage.getItem(storageKey(lessonId))
+    const raw = localStorage.getItem(storageKey(workspaceId))
     if (!raw) return false
     const saved = JSON.parse(raw)
     if (saved && typeof saved === 'object') {
@@ -152,11 +152,11 @@ export function loadGitState(lessonId) {
   }
 }
 
-export function clearGitState(lessonId) {
-  if (!lessonId) return false
+export function clearGitState(workspaceId) {
+  if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.removeItem(storageKey(lessonId))
+    localStorage.removeItem(storageKey(workspaceId))
     return true
   } catch (e) {
     return false
@@ -1805,7 +1805,7 @@ function gitHelp() {
   return {
     type: 'output',
     lines: [
-      '可用命令一览（Git 学习模拟环境支持）：',
+      '可用命令一览（Git 模拟环境支持）：',
       '',
       '  git init                       初始化仓库',
       '  git config --global user.name "名字" / user.email "邮箱"  配置身份',

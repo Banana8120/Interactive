@@ -280,7 +280,7 @@ const workingFiles = computed(() => {
 })
 
 // 暂存区：直接从引擎的 staged 对象读取，而不是 status 过滤后的结果。
-// 这样即使文件与 HEAD 无变化，学习者也能看到当前已 add 的内容。
+// 这样即使文件与 HEAD 无变化，也能看到当前已 add 的内容。
 const stagedFiles = computed(() => {
   if (!env.value.initialized) return []
   const headHash = env.value.detached ? env.value.detachedAt : env.value.branches[env.value.head]
