@@ -106,6 +106,12 @@ npm run type-check
 npx vue-tsc --noEmit
 ```
 
+### 代码检查与格式检查
+```bash
+npm run lint
+npm run format:check
+```
+
 ### 单元测试
 ```bash
 npm run test

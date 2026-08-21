@@ -22,6 +22,8 @@
 ```bash
 npm install
 npm run dev
+npm run lint
+npm run format:check
 npm run type-check
 npm run test
 npm run build
@@ -35,6 +37,8 @@ npm run preview
 ```bash
 npm run type-check
 npm run test
+npm run lint
+npm run format:check
 npm run build
 ```
 

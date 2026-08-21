@@ -19,6 +19,8 @@ CI 使用 `npm ci`，本地也可以在需要完全复现锁文件时使用。
 
 ```bash
 npm run dev
+npm run lint
+npm run format:check
 npm run type-check
 npm run test
 npm run build
@@ -28,6 +30,8 @@ npm run preview
 说明：
 
 - `npm run dev`：启动 Vite 开发服务器，默认端口 `5173`。
+- `npm run lint`：运行 ESLint，检查 Vue、TypeScript 和常见代码质量问题。
+- `npm run format:check`：运行 Prettier 格式检查，不改写文件。
 - `npm run type-check`：运行 `vue-tsc --noEmit`。
 - `npm run test`：运行 Vitest 单元测试，当前覆盖 JVM 源码解析、目标行执行、内存分配、线程隔离、GC、JavaScript 执行上下文模拟和持久化。
 - `npm run build`：先类型检查，再执行 Vite 生产构建。
@@ -38,6 +42,8 @@ npm run preview
 ```bash
 npm run type-check
 npm run test
+npm run lint
+npm run format:check
 npm run build
 ```
 
@@ -59,6 +65,7 @@ src/
 - 路径别名使用 `@/...`，不要写过深的相对路径。
 - 页面文案以中文为主，保持具体、友好、少术语堆叠。
 - xicons 图标别名已全局注册，不需要在每个组件单独注册图标组件；新增图标先在 `src/icons/xicons.ts` 映射。
+- ESLint 使用 flat config，配置在 `eslint.config.js`；Prettier 配置在 `.prettierrc.json`。
 - 样式优先放在组件 scoped 样式内；跨组件基础样式放到 `src/assets/main.css`。
 - 不要修改生成产物 `dist/`，构建会重新生成。
 - 不要依赖真实 Docker/Git/MySQL/JVM/JavaScript runtime，新增行为应在 `src/terminal/` 内模拟。
