@@ -15,6 +15,13 @@ function setupUsersTable() {
   sql('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50), age INT);')
 }
 
+function setupAnalyticsUsersTable() {
+  sql('CREATE DATABASE shop;')
+  sql('USE shop;')
+  sql('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50), role VARCHAR(20), age INT, score INT);')
+  sql("INSERT INTO users (name, role, age, score) VALUES ('Ada', 'member', 18, 100), ('Bob', 'guest', 15, 70), ('Cora', 'member', 21, 90), ('Dee', 'guest', 30, NULL);")
+}
+
 describe('mysql simulator regression coverage', () => {
   beforeEach(() => {
     resetMySqlEnvironment()
@@ -50,6 +57,56 @@ describe('mysql simulator regression coverage', () => {
     expect(selected).toContain('21')
     expect(selected).not.toContain('Ada')
     expect(selected).not.toContain('Bob')
+  })
+
+  it('selects count, sum, average, min and max over filtered rows', () => {
+    setupAnalyticsUsersTable()
+
+    const selected = output('SELECT COUNT(*), COUNT(score), SUM(score), AVG(score), MIN(age), MAX(age) FROM users WHERE age >= 18;')
+
+    expect(selected).toContain('COUNT(*)')
+    expect(selected).toContain('COUNT(score)')
+    expect(selected).toContain('SUM(score)')
+    expect(selected).toContain('AVG(score)')
+    expect(selected).toContain('MIN(age)')
+    expect(selected).toContain('MAX(age)')
+    expect(selected).toContain('| 3')
+    expect(selected).toContain('| 2')
+    expect(selected).toContain('| 190')
+    expect(selected).toContain('| 95')
+    expect(selected).toContain('| 18')
+    expect(selected).toContain('| 30')
+  })
+
+  it('groups rows and orders by an aggregate expression before applying limit', () => {
+    setupAnalyticsUsersTable()
+
+    const selected = output('SELECT role, COUNT(*), AVG(score) FROM users WHERE age >= 15 GROUP BY role ORDER BY AVG(score) DESC LIMIT 1;')
+
+    expect(selected).toContain('role')
+    expect(selected).toContain('COUNT(*)')
+    expect(selected).toContain('AVG(score)')
+    expect(selected).toContain('member')
+    expect(selected).toContain('95')
+    expect(selected).not.toContain('guest')
+  })
+
+  it('supports simple distinct-style GROUP BY without aggregate fields', () => {
+    setupAnalyticsUsersTable()
+
+    const selected = output('SELECT role FROM users GROUP BY role ORDER BY role DESC;')
+
+    expect(selected).toContain('member')
+    expect(selected).toContain('guest')
+    expect(selected.indexOf('member')).toBeLessThan(selected.indexOf('guest'))
+  })
+
+  it('reports unsupported aggregate usages clearly', () => {
+    setupAnalyticsUsersTable()
+
+    expect(output('SELECT SUM(name) FROM users;')).toContain('只能用于数值字段')
+    expect(output('SELECT name, COUNT(*) FROM users;')).toContain('Mixing of GROUP columns')
+    expect(output('SELECT role, COUNT(*) FROM users GROUP BY missing;')).toContain("Unknown column 'missing'")
   })
 
   it('updates, deletes and alters table rows and columns', () => {

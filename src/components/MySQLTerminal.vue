@@ -126,7 +126,8 @@ const baseCommands = computed(() => {
     ...dbs.map((db) => `USE ${db};`),
     ...tables.map((table) => `DESC ${table};`),
     ...tables.map((table) => `SELECT * FROM ${table};`),
-    ...tables.map((table) => `SHOW TABLES;`)
+    ...tables.map((table) => `SELECT COUNT(*) FROM ${table};`),
+    ...(tables.length ? ['SHOW TABLES;'] : [])
   ]
   return uniq([
     'mysql --version',
@@ -139,6 +140,8 @@ const baseCommands = computed(() => {
     "INSERT INTO users (name, age) VALUES ('Ada', 18);",
     'SELECT * FROM users;',
     'SELECT name, age FROM users WHERE age >= 18 ORDER BY id DESC LIMIT 2;',
+    'SELECT COUNT(*), AVG(age) FROM users;',
+    'SELECT age, COUNT(*) FROM users GROUP BY age ORDER BY COUNT(*) DESC;',
     "UPDATE users SET age = 20 WHERE name = 'Ada';",
     "DELETE FROM users WHERE name = 'Ada';",
     'ALTER TABLE users ADD COLUMN email VARCHAR(80);',
@@ -257,7 +260,7 @@ function resetEnv() {
 const highlight = (line: string): string => {
   if (!line) return '&nbsp;'
   let s = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  s = s.replace(/\b(SELECT|FROM|WHERE|ORDER BY|LIMIT|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE|DATABASE|TABLE|USE|SHOW|DESC|ALTER|TRUNCATE|DROP|PRIMARY KEY|AUTO_INCREMENT|VARCHAR|INT|NOT NULL)\b/gi, '<span class="hl-sql">$&</span>')
+  s = s.replace(/\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|COUNT|SUM|AVG|MIN|MAX|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE|DATABASE|TABLE|USE|SHOW|DESC|ALTER|TRUNCATE|DROP|PRIMARY KEY|AUTO_INCREMENT|VARCHAR|INT|NOT NULL)\b/gi, '<span class="hl-sql">$&</span>')
   s = s.replace(/\b(ERROR|Unknown|Duplicate|syntax|No database selected|not supported)\b/gi, '<span class="hl-err">$&</span>')
   s = s.replace(/\b(Query OK|Database changed|Welcome|Empty set)\b/g, '<span class="hl-ok">$&</span>')
   return s

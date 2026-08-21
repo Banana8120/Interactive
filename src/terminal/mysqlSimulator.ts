@@ -391,12 +391,16 @@ function selectSql(sql: string): MySqlResult {
   if ('error' in parsedTail) return parsedTail.error
 
   const table = tableResult.table
-  const fields = fieldsText === '*'
-    ? table.columns.map((c) => c.name)
-    : splitCsvRespectingSyntax(fieldsText).map(normalizeIdentifier)
+  const parsedFields = parseSelectFields(fieldsText, table)
+  if ('error' in parsedFields) return parsedFields.error
+  const fields = parsedFields.fields
 
-  const unknown = fields.find((name) => !table.columns.some((c) => c.name === name))
-  if (unknown) return { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${unknown}' in 'field list'`] }
+  const groupedResult = selectGroupedOrAggregated(table, fields, table.rows.filter((row) => matchesWhere(row, parsedTail.where)), parsedTail)
+  if (groupedResult) return groupedResult
+
+  if (parsedTail.orderBy && !table.columns.some((c) => c.name === parsedTail.orderBy)) {
+    return { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${parsedTail.orderBy}' in 'order clause'`] }
+  }
 
   let rows = table.rows.filter((row) => matchesWhere(row, parsedTail.where))
   if (parsedTail.orderBy) {
@@ -408,10 +412,13 @@ function selectSql(sql: string): MySqlResult {
   if (!rows.length) return { type: 'output', lines: ['Empty set (0.00 sec)'] }
   const resultRows = rows.map((row) => {
     const out: Record<string, MySqlValue> = {}
-    for (const field of fields) out[field] = row[field] ?? null
+    for (const field of fields) {
+      if (field.kind === 'column') out[field.output] = row[field.column] ?? null
+    }
     return out
   })
-  return resultTable(fields, resultRows, `${resultRows.length} row${resultRows.length === 1 ? '' : 's'} in set (0.00 sec)`)
+  const headers = fields.map((field) => field.output)
+  return resultTable(headers, resultRows, `${resultRows.length} row${resultRows.length === 1 ? '' : 's'} in set (0.00 sec)`)
 }
 
 function updateSql(sql: string): MySqlResult {
@@ -739,8 +746,29 @@ function parseValueGroups(text: string): { groups: string[][] } | { error: MySql
   return { groups }
 }
 
+type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max'
+
+interface SelectAggregateExpression {
+  functionName: AggregateFunction
+  column: string | null
+  output: string
+}
+
+interface SelectColumnField {
+  kind: 'column'
+  column: string
+  output: string
+}
+
+interface SelectAggregateField extends SelectAggregateExpression {
+  kind: 'aggregate'
+}
+
+type SelectField = SelectColumnField | SelectAggregateField
+
 interface SelectTail {
   where: string
+  groupBy: string | null
   orderBy: string | null
   orderDir: 'asc' | 'desc'
   limit: number | null
@@ -748,26 +776,249 @@ interface SelectTail {
 
 function parseSelectTail(rawTail: string): SelectTail | { error: MySqlResult } {
   let tail = rawTail.trim()
-  const parsed: SelectTail = { where: '', orderBy: null, orderDir: 'asc', limit: null }
+  const parsed: SelectTail = { where: '', groupBy: null, orderBy: null, orderDir: 'asc', limit: null }
 
-  const limitMatch = tail.match(/\s+limit\s+(\d+)\s*$/i)
+  const limitMatch = tail.match(/(?:^|\s+)limit\s+(\d+)\s*$/i)
   if (limitMatch) {
     parsed.limit = Number(limitMatch[1])
     tail = tail.slice(0, limitMatch.index).trim()
   }
 
-  const orderMatch = tail.match(/\s+order\s+by\s+([`\w]+)(?:\s+(asc|desc))?\s*$/i)
+  const orderMatch = tail.match(/(?:^|\s+)order\s+by\s+([\s\S]+?)(?:\s+(asc|desc))?\s*$/i)
   if (orderMatch) {
-    parsed.orderBy = normalizeIdentifier(orderMatch[1])
+    parsed.orderBy = normalizeSelectOutputKey(orderMatch[1])
     parsed.orderDir = (orderMatch[2]?.toLowerCase() as 'asc' | 'desc') || 'asc'
     tail = tail.slice(0, orderMatch.index).trim()
   }
 
+  const groupMatch = tail.match(/(?:^|\s+)group\s+by\s+([`\w]+)\s*$/i)
+  if (groupMatch) {
+    parsed.groupBy = normalizeIdentifier(groupMatch[1])
+    tail = tail.slice(0, groupMatch.index).trim()
+  }
+
   const whereMatch = tail.match(/^where\s+([\s\S]+)$/i)
   if (whereMatch) parsed.where = whereMatch[1].trim()
-  else if (tail) return { error: syntaxError("SELECT * FROM users WHERE age >= 18 ORDER BY id DESC LIMIT 5;") }
+  else if (tail) return { error: syntaxError("SELECT status, COUNT(*) FROM users WHERE age >= 18 GROUP BY status ORDER BY COUNT(*) DESC LIMIT 5;") }
 
   return parsed
+}
+
+function normalizeSelectOutputKey(raw: string): string {
+  const aggregate = parseAggregateExpression(raw)
+  if (aggregate) return aggregate.output
+  return normalizeIdentifier(raw)
+}
+
+function parseSelectFields(fieldsText: string, table: MySqlTable): { fields: SelectField[] } | { error: MySqlResult } {
+  const rawFields = fieldsText === '*'
+    ? table.columns.map((column) => column.name)
+    : splitCsvRespectingSyntax(fieldsText)
+
+  if (!rawFields.length) return { error: syntaxError('SELECT * FROM users;') }
+
+  const fields: SelectField[] = []
+  for (const rawField of rawFields) {
+    const aggregate = parseAggregateExpression(rawField)
+    if (aggregate) {
+      const validation = validateAggregateExpression(aggregate, table)
+      if (validation) return { error: validation }
+      fields.push({ kind: 'aggregate', ...aggregate })
+      continue
+    }
+
+    if (/^\w+\s*\(/.test(rawField.trim())) {
+      return { error: syntaxError('SELECT status, COUNT(*) FROM users GROUP BY status;') }
+    }
+
+    const column = normalizeIdentifier(rawField)
+    if (!table.columns.some((item) => item.name === column)) {
+      return { error: { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${column}' in 'field list'`] } }
+    }
+    fields.push({ kind: 'column', column, output: column })
+  }
+
+  return { fields }
+}
+
+function parseAggregateExpression(raw: string): SelectAggregateExpression | null {
+  const m = raw.trim().match(/^(count|sum|avg|min|max)\s*\(\s*(\*|[`\w]+)\s*\)$/i)
+  if (!m) return null
+  const functionName = m[1].toLowerCase() as AggregateFunction
+  const column = m[2] === '*' ? null : normalizeIdentifier(m[2])
+  return {
+    functionName,
+    column,
+    output: `${functionName.toUpperCase()}(${column || '*'})`
+  }
+}
+
+function validateAggregateExpression(expression: SelectAggregateExpression, table: MySqlTable): MySqlResult | null {
+  if (expression.column === null) {
+    if (expression.functionName === 'count') return null
+    return syntaxError('SELECT COUNT(*) FROM users;')
+  }
+  if (!table.columns.some((column) => column.name === expression.column)) {
+    return { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${expression.column}' in 'field list'`] }
+  }
+  return null
+}
+
+function selectGroupedOrAggregated(
+  table: MySqlTable,
+  fields: SelectField[],
+  filteredRows: MySqlRow[],
+  tail: SelectTail
+): MySqlResult | null {
+  const hasAggregate = fields.some((field) => field.kind === 'aggregate')
+  if (!hasAggregate && !tail.groupBy) return null
+
+  if (tail.groupBy && !table.columns.some((column) => column.name === tail.groupBy)) {
+    return { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${tail.groupBy}' in 'group statement'`] }
+  }
+
+  const groupValidation = validateGroupedSelectFields(fields, tail)
+  if (groupValidation) return groupValidation
+
+  const orderValidation = validateSelectOrderBy(table, fields, tail)
+  if (orderValidation) return orderValidation
+
+  let resultRows = buildGroupedResultRows(fields, filteredRows, tail)
+  if ('error' in resultRows) return resultRows.error
+
+  if (tail.orderBy) {
+    resultRows = [...resultRows].sort((a, b) => compareValues(a[tail.orderBy!] ?? null, b[tail.orderBy!] ?? null))
+    if (tail.orderDir === 'desc') resultRows.reverse()
+  }
+  if (typeof tail.limit === 'number') resultRows = resultRows.slice(0, tail.limit)
+
+  if (!resultRows.length) return { type: 'output', lines: ['Empty set (0.00 sec)'] }
+  const headers = fields.map((field) => field.output)
+  return resultTable(headers, resultRows, `${resultRows.length} row${resultRows.length === 1 ? '' : 's'} in set (0.00 sec)`)
+}
+
+function validateGroupedSelectFields(fields: SelectField[], tail: SelectTail): MySqlResult | null {
+  const hasAggregate = fields.some((field) => field.kind === 'aggregate')
+  const groupBy = tail.groupBy
+
+  for (const field of fields) {
+    if (field.kind !== 'column') continue
+    if (!groupBy) {
+      if (hasAggregate) {
+        return {
+          type: 'error',
+          lines: [`ERROR 1140 (42000): Mixing of GROUP columns (${field.column}) with no GROUP BY is not supported in this simulator.`]
+        }
+      }
+      continue
+    }
+    if (field.column !== groupBy) {
+      return {
+        type: 'error',
+        lines: [`ERROR 1055 (42000): '${field.column}' isn't in GROUP BY. 当前模拟器只支持选择分组字段和聚合函数。`]
+      }
+    }
+  }
+
+  return null
+}
+
+function validateSelectOrderBy(table: MySqlTable, fields: SelectField[], tail: SelectTail): MySqlResult | null {
+  if (!tail.orderBy) return null
+  if (fields.some((field) => field.output === tail.orderBy)) return null
+  if (tail.groupBy && tail.orderBy === tail.groupBy) return null
+
+  const aggregate = parseAggregateExpression(tail.orderBy)
+  if (aggregate) return validateAggregateExpression(aggregate, table)
+
+  if (!tail.groupBy && !fields.some((field) => field.kind === 'aggregate') && table.columns.some((column) => column.name === tail.orderBy)) {
+    return null
+  }
+
+  return { type: 'error', lines: [`ERROR 1054 (42S22): Unknown column '${tail.orderBy}' in 'order clause'`] }
+}
+
+function buildGroupedResultRows(
+  fields: SelectField[],
+  filteredRows: MySqlRow[],
+  tail: SelectTail
+): Record<string, MySqlValue>[] | { error: MySqlResult } {
+  const groups = groupRows(filteredRows, tail.groupBy)
+  const rows: Record<string, MySqlValue>[] = []
+
+  for (const group of groups) {
+    const outputRow: Record<string, MySqlValue> = {}
+    if (tail.groupBy) outputRow[tail.groupBy] = group.key
+
+    for (const field of fields) {
+      if (field.kind === 'column') {
+        outputRow[field.output] = tail.groupBy ? group.key : (group.rows[0]?.[field.column] ?? null)
+        continue
+      }
+
+      const aggregate = computeAggregate(field, group.rows)
+      if ('error' in aggregate) return { error: aggregate.error }
+      outputRow[field.output] = aggregate.value
+    }
+
+    if (tail.orderBy && outputRow[tail.orderBy] === undefined) {
+      const aggregate = parseAggregateExpression(tail.orderBy)
+      if (aggregate) {
+        const computed = computeAggregate({ kind: 'aggregate', ...aggregate }, group.rows)
+        if ('error' in computed) return { error: computed.error }
+        outputRow[tail.orderBy] = computed.value
+      }
+    }
+
+    rows.push(outputRow)
+  }
+
+  return rows
+}
+
+function groupRows(rows: MySqlRow[], groupBy: string | null): { key: MySqlValue; rows: MySqlRow[] }[] {
+  if (!groupBy) return [{ key: null, rows }]
+
+  const groups = new Map<string, { key: MySqlValue; rows: MySqlRow[] }>()
+  for (const row of rows) {
+    const key = row[groupBy] ?? null
+    const mapKey = `${typeof key}:${String(key)}`
+    const group = groups.get(mapKey)
+    if (group) group.rows.push(row)
+    else groups.set(mapKey, { key, rows: [row] })
+  }
+  return [...groups.values()]
+}
+
+function computeAggregate(field: SelectAggregateField, rows: MySqlRow[]): { value: MySqlValue } | { error: MySqlResult } {
+  const column = field.column
+  if (field.functionName === 'count') {
+    if (!column) return { value: rows.length }
+    return { value: rows.filter((row) => row[column] !== null && row[column] !== undefined).length }
+  }
+
+  const values = rows
+    .map((row) => row[column!])
+    .filter((value) => value !== null && value !== undefined)
+
+  if (!values.length) return { value: null }
+
+  if (field.functionName === 'sum' || field.functionName === 'avg') {
+    const nonNumeric = values.find((value) => typeof value !== 'number')
+    if (nonNumeric !== undefined) {
+      return {
+        error: {
+          type: 'error',
+          lines: [`ERROR 1292 (22007): 聚合函数 ${field.output} 只能用于数值字段。`]
+        }
+      }
+    }
+    const sum = (values as number[]).reduce((total, value) => total + value, 0)
+    return { value: field.functionName === 'sum' ? sum : sum / values.length }
+  }
+
+  const sorted = [...values].sort(compareValues)
+  return { value: field.functionName === 'min' ? sorted[0] : sorted[sorted.length - 1] }
 }
 
 function parseAssignments(text: string): { values: Record<string, MySqlValue> } | { error: MySqlResult } {
@@ -884,6 +1135,7 @@ function mysqlHelp(): MySqlResult {
       '  SHOW TABLES; / DESC users;              查看表和字段结构',
       "  INSERT INTO users (name, age) VALUES ('Ada', 18);",
       '  SELECT * FROM users WHERE age >= 18 ORDER BY id DESC LIMIT 5;',
+      '  SELECT age, COUNT(*) FROM users GROUP BY age;',
       '  UPDATE users SET age = 20 WHERE id = 1;',
       '  DELETE FROM users WHERE id = 1;',
       '  ALTER TABLE users ADD COLUMN email VARCHAR(80);',

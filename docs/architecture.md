@@ -103,7 +103,7 @@ MySQL 模拟器核心 API：
 - `loadMySqlState(workspaceId)`
 - `clearMySqlState(workspaceId)`
 
-当前 MySQL 模拟器是轻量 SQL 解析器，覆盖 `SHOW`、`CREATE DATABASE`、`USE`、`CREATE TABLE`、`DESC`、`INSERT`、`SELECT`、`UPDATE`、`DELETE`、`ALTER TABLE ADD`、`DROP`、`TRUNCATE` 等常用语句，不承担完整 SQL 引擎职责。
+当前 MySQL 模拟器是轻量 SQL 解析器，覆盖 `SHOW`、`CREATE DATABASE`、`USE`、`CREATE TABLE`、`DESC`、`INSERT`、`SELECT`、`WHERE`、`GROUP BY`、`ORDER BY`、`LIMIT`、`COUNT/SUM/AVG/MIN/MAX`、`UPDATE`、`DELETE`、`ALTER TABLE ADD`、`DROP`、`TRUNCATE` 等常用语句，不承担完整 SQL 引擎职责。
 
 ## JVM 模块数据流
 
