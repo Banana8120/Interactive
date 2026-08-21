@@ -879,6 +879,8 @@ function gitMerge(args) {
   }
   if (isCurAncestor) {
     state.branches[state.head] = target
+    state.workdir = { ...targetCommit.files }
+    state.staged = {}
     pushReflog(`merge ${name}: Fast-forward`)
     const statLines = diffStatLines(curCommit.files, targetCommit.files)
     return {
@@ -1034,6 +1036,8 @@ function gitPull(args) {
   if (cur && state.commits[remoteHash]) {
     // 模拟快进拉取
     state.branches[state.head] = remoteHash
+    state.workdir = { ...state.commits[remoteHash].files }
+    state.staged = {}
     pushReflog(`pull ${remoteName} ${state.head}: Fast-forward`)
     return {
       type: 'output',
