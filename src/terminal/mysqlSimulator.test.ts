@@ -1,5 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { executeMySqlCommand, getMySqlState, resetMySqlEnvironment } from './mysqlSimulator'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { executeMySqlCommand, getMySqlState, loadMySqlState, resetMySqlEnvironment, saveMySqlState } from './mysqlSimulator'
+
+const storageValues = new Map<string, string>()
+const workspaceId = 'mysql-playground'
+const storageKey = `mysql-sim-state-v1-${workspaceId}`
+
+function stubLocalStorage() {
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => storageValues.get(key) ?? null,
+    setItem: (key: string, value: string) => storageValues.set(key, value),
+    removeItem: (key: string) => storageValues.delete(key)
+  })
+}
 
 function sql(input: string) {
   return executeMySqlCommand(input)
@@ -25,6 +37,8 @@ function setupAnalyticsUsersTable() {
 describe('mysql simulator regression coverage', () => {
   beforeEach(() => {
     resetMySqlEnvironment()
+    storageValues.clear()
+    stubLocalStorage()
   })
 
   it('creates a database, switches to it and creates a table', () => {
@@ -134,5 +148,77 @@ describe('mysql simulator regression coverage', () => {
     expect(state.currentDatabase).toBeNull()
     expect(Object.keys(state.databases).sort()).toEqual(['information_schema', 'mysql'])
     expect(state.history).toEqual([])
+  })
+
+  it('saves MySQL state with a schema version wrapper', () => {
+    setupUsersTable()
+    sql("INSERT INTO users (name, age) VALUES ('Ada', 18);")
+
+    expect(saveMySqlState(workspaceId)).toBe(true)
+
+    const saved = JSON.parse(storageValues.get(storageKey)!)
+    expect(saved.schemaVersion).toBe(1)
+    expect(saved.state.currentDatabase).toBe('shop')
+    expect(saved.state.databases.shop.tables.users.rows).toEqual([{ id: 1, name: 'Ada', age: 18 }])
+  })
+
+  it('loads legacy unversioned MySQL state through the v0 migration', () => {
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        connected: true,
+        currentDatabase: 'shop',
+        databases: {
+          shop: {
+            name: 'shop',
+            tables: {
+              users: {
+                name: 'users',
+                columns: [
+                  { name: 'id', type: 'INT', nullable: false, primaryKey: true, autoIncrement: true },
+                  { name: 'name', type: 'VARCHAR(50)', nullable: true },
+                  { name: 'age', type: 'INT', nullable: true }
+                ],
+                rows: [{ id: 1, name: 'Ada', age: 18 }],
+                autoIncrement: 2
+              }
+            }
+          }
+        },
+        history: ['USE shop;']
+      })
+    )
+
+    expect(loadMySqlState(workspaceId)).toBe(true)
+
+    const state = getMySqlState()
+    expect(state.currentDatabase).toBe('shop')
+    expect(Object.keys(state.databases).sort()).toEqual(['information_schema', 'mysql', 'shop'])
+    expect(state.databases.shop.tables.users.rows).toEqual([{ id: 1, name: 'Ada', age: 18 }])
+    expect(state.history).toEqual(['USE shop;'])
+  })
+
+  it('keeps current MySQL state when cached JSON is invalid', () => {
+    setupUsersTable()
+    storageValues.set(storageKey, '{broken')
+
+    expect(loadMySqlState(workspaceId)).toBe(false)
+    expect(getMySqlState().currentDatabase).toBe('shop')
+    expect(getMySqlState().databases.shop.tables.users).toBeTruthy()
+  })
+
+  it('rejects unsupported MySQL state schema versions', () => {
+    setupUsersTable()
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        schemaVersion: 999,
+        state: { currentDatabase: 'future', databases: {} }
+      })
+    )
+
+    expect(loadMySqlState(workspaceId)).toBe(false)
+    expect(getMySqlState().currentDatabase).toBe('shop')
+    expect(getMySqlState().databases.shop.tables.users).toBeTruthy()
   })
 })

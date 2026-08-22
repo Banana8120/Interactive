@@ -1,5 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { executeCommand, getEnvironment, resetEnvironment } from './simulator'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { executeCommand, getEnvironment, loadDockerState, resetEnvironment, saveDockerState } from './simulator'
+
+const storageValues = new Map<string, string>()
+const workspaceId = 'docker-playground'
+const storageKey = `docker-sim-state-v1-${workspaceId}`
+
+function stubLocalStorage() {
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => storageValues.get(key) ?? null,
+    setItem: (key: string, value: string) => storageValues.set(key, value),
+    removeItem: (key: string) => storageValues.delete(key)
+  })
+}
 
 function text(input: string) {
   return executeCommand(input).lines.join('\n')
@@ -8,6 +20,8 @@ function text(input: string) {
 describe('docker simulator regression coverage', () => {
   beforeEach(() => {
     resetEnvironment()
+    storageValues.clear()
+    stubLocalStorage()
   })
 
   it('pulls a remote image into the local image list and records command history', () => {
@@ -56,5 +70,69 @@ describe('docker simulator regression coverage', () => {
     expect(env.networks.map((network) => network.name).sort()).toEqual(['bridge', 'host', 'none'])
     expect(env.images.some((image) => image.full === 'alpine:3.19')).toBe(false)
     expect(env.history).toEqual([])
+  })
+
+  it('saves Docker state with a schema version wrapper', () => {
+    text('docker pull alpine:3.19')
+    text('docker volume create data')
+
+    expect(saveDockerState(workspaceId)).toBe(true)
+
+    const saved = JSON.parse(storageValues.get(storageKey)!)
+    expect(saved.schemaVersion).toBe(1)
+    expect(saved.state.images['alpine:3.19']).toMatchObject({ repo: 'alpine', tag: '3.19' })
+    expect(saved.state.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'data' })]))
+  })
+
+  it('loads legacy unversioned Docker state through the v0 migration', () => {
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        images: {
+          'alpine:3.19': {
+            repo: 'alpine',
+            tag: '3.19',
+            id: 'sha256:legacy',
+            size: '7MB',
+            created: 'just now',
+            status: '已下载'
+          }
+        },
+        containers: [{ name: 'legacy', image: 'alpine:3.19', status: 'exited', shortId: 'abc123' }],
+        volumes: [{ name: 'legacy-data', driver: 'local', mountpoint: '/var/lib/docker/volumes/legacy-data/_data' }],
+        networks: [{ name: 'legacy-net', driver: 'bridge', scope: 'local' }],
+        counters: { container: 7, image: 0, network: 2, volume: 3, ports: 4010 }
+      })
+    )
+
+    expect(loadDockerState(workspaceId)).toBe(true)
+
+    const env = getEnvironment()
+    expect(env.images.some((image) => image.full === 'alpine:3.19')).toBe(true)
+    expect(env.containers).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'legacy' })]))
+    expect(env.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'legacy-data' })]))
+    expect(env.networks).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'legacy-net' })]))
+  })
+
+  it('keeps current Docker state when cached JSON is invalid', () => {
+    text('docker volume create keep')
+    storageValues.set(storageKey, '{broken')
+
+    expect(loadDockerState(workspaceId)).toBe(false)
+    expect(getEnvironment().volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'keep' })]))
+  })
+
+  it('rejects unsupported Docker state schema versions', () => {
+    text('docker volume create keep')
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        schemaVersion: 999,
+        state: { volumes: [{ name: 'future', driver: 'local' }] }
+      })
+    )
+
+    expect(loadDockerState(workspaceId)).toBe(false)
+    expect(getEnvironment().volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'keep' })]))
   })
 })

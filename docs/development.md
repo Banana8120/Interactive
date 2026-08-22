@@ -33,7 +33,7 @@ npm run preview
 - `npm run lint`：运行 ESLint，检查 Vue、TypeScript 和常见代码质量问题。
 - `npm run format:check`：运行 Prettier 格式检查，不改写文件。
 - `npm run type-check`：运行 `vue-tsc --noEmit`。
-- `npm run test`：运行 Vitest 单元测试，当前覆盖 JVM 源码解析、目标行执行、内存分配、线程隔离、GC、JavaScript 执行上下文模拟和持久化。
+- `npm run test`：运行 Vitest 单元测试，当前覆盖 Docker/Git/MySQL 模拟器基础命令与持久化迁移、JVM 源码解析、目标行执行、内存分配、线程隔离、GC、JavaScript 执行上下文模拟和持久化。
 - `npm run build`：先类型检查，再执行 Vite 生产构建。
 - `npm run preview`：本地预览 `dist/` 产物。
 
@@ -84,6 +84,8 @@ src/
 - `docker-viz-panel-open`
 - `git-state-panel-open`
 - `mysql-state-panel-open`
+
+Docker、Git、MySQL 的状态缓存内容是 `{ schemaVersion: 1, state: ... }`。如果要排查老用户白屏或字段改名问题，优先确认对应模拟器的迁移函数是否能读取旧的无版本裸状态，并在字段缺失时回填默认结构。
 
 ### Docker 状态没有刷新
 
@@ -178,7 +180,7 @@ JavaScript 模拟器维护：
 - `let`、`const`、`var` 变量绑定与 const 重新赋值诊断
 - localStorage 中的编辑器源码，不持久化派生执行快照
 
-新增状态字段后，记得更新 `src/types/index.ts`，并确认 localStorage 恢复旧数据时不会崩溃。
+新增状态字段后，记得更新 `src/types/index.ts`，并同步更新 Docker/Git/MySQL 的 schemaVersion 迁移或 JVM/JavaScript 的源码存储兼容逻辑，确认 localStorage 恢复旧数据时不会崩溃。
 
 ## 发布
 

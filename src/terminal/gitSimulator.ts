@@ -34,6 +34,7 @@ function createState() {
     branches: { master: null },          // 分支名 -> 提交 hash（null 表示无提交）
     head: 'master',                      // 当前分支名
     detached: false,
+    detachedAt: null,
     commits: {},                         // hash -> commit 对象
     tags: {},                            // 标签名 -> hash
     staged: {},                          // 路径 -> 内容（null 表示删除）
@@ -119,16 +120,74 @@ export function resetGitEnvironment() {
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY_PREFIX = 'git-sim-state-v1'
+const GIT_STATE_SCHEMA_VERSION = 1
 
 function storageKey(workspaceId) {
   return `${STORAGE_KEY_PREFIX}-${workspaceId}`
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeObject(value, fallback = {}) {
+  return isPlainObject(value) ? { ...value } : { ...fallback }
+}
+
+function migrateGitState(saved) {
+  if (!isPlainObject(saved)) return null
+  if ('schemaVersion' in saved) {
+    if (saved.schemaVersion !== GIT_STATE_SCHEMA_VERSION || !isPlainObject(saved.state)) return null
+    return normalizeGitState(saved.state)
+  }
+  return normalizeGitState(saved)
+}
+
+function normalizeGitState(source) {
+  if (!isPlainObject(source)) return null
+
+  const next = createState()
+  const config = normalizeObject(source.config, next.config)
+  const user = normalizeObject(config.user, next.config.user)
+  next.config = {
+    ...next.config,
+    ...config,
+    user: {
+      name: typeof user.name === 'string' ? user.name : '',
+      email: typeof user.email === 'string' ? user.email : ''
+    }
+  }
+
+  next.initialized = !!source.initialized
+  next.branches = normalizeObject(source.branches, next.branches)
+  if (!Object.prototype.hasOwnProperty.call(next.branches, 'master')) next.branches.master = null
+  next.head = typeof source.head === 'string' && Object.prototype.hasOwnProperty.call(next.branches, source.head)
+    ? source.head
+    : 'master'
+  next.detached = !!source.detached
+  next.detachedAt = typeof source.detachedAt === 'string' ? source.detachedAt : null
+  next.commits = normalizeObject(source.commits, next.commits)
+  next.tags = normalizeObject(source.tags, next.tags)
+  next.staged = normalizeObject(source.staged, next.staged)
+  next.workdir = normalizeObject(source.workdir, next.workdir)
+  next.remotes = normalizeObject(source.remotes, next.remotes)
+  next.stash = Array.isArray(source.stash) ? [...source.stash] : []
+  next.reflog = Array.isArray(source.reflog) ? [...source.reflog] : []
+  next.mergeState = source.mergeState && typeof source.mergeState === 'object' ? source.mergeState : null
+  next.cherryPickState = source.cherryPickState && typeof source.cherryPickState === 'object' ? source.cherryPickState : null
+  next.worktrees = Array.isArray(source.worktrees) ? [...source.worktrees] : []
+  next.bisectState = source.bisectState && typeof source.bisectState === 'object' ? source.bisectState : null
+  return next
 }
 
 export function saveGitState(workspaceId) {
   if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.setItem(storageKey(workspaceId), JSON.stringify(state))
+    localStorage.setItem(storageKey(workspaceId), JSON.stringify({
+      schemaVersion: GIT_STATE_SCHEMA_VERSION,
+      state
+    }))
     return true
   } catch (e) {
     return false
@@ -142,11 +201,10 @@ export function loadGitState(workspaceId) {
     const raw = localStorage.getItem(storageKey(workspaceId))
     if (!raw) return false
     const saved = JSON.parse(raw)
-    if (saved && typeof saved === 'object') {
-      state = saved
-      return true
-    }
-    return false
+    const migrated = migrateGitState(saved)
+    if (!migrated) return false
+    state = migrated
+    return true
   } catch (e) {
     return false
   }

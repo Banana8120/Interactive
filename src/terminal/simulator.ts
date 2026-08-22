@@ -181,9 +181,78 @@ export function resetEnvironment() {
 // ---------------------------------------------------------------------------
 
 const DOCKER_STORAGE_PREFIX = 'docker-sim-state-v1'
+const DOCKER_STATE_SCHEMA_VERSION = 1
 
 function dockerStorageKey(workspaceId) {
   return `${DOCKER_STORAGE_PREFIX}-${workspaceId}`
+}
+
+function defaultDockerNetworks() {
+  return [
+    { name: 'bridge', driver: 'bridge', scope: 'local' },
+    { name: 'host', driver: 'host', scope: 'local' },
+    { name: 'none', driver: 'null', scope: 'local' }
+  ]
+}
+
+function createDockerStateSnapshot() {
+  return {
+    images: IMAGE_DB,
+    containers: CONTAINERS,
+    volumes: VOLUMES,
+    networks: NETWORKS,
+    counters: {
+      container: COUNTER.container,
+      image: COUNTER.image,
+      network: NETWORK_COUNTER,
+      volume: VOLUME_COUNTER,
+      ports: PORTS_COUNTER
+    }
+  }
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function migrateDockerState(saved) {
+  if (!isPlainObject(saved)) return null
+  if ('schemaVersion' in saved) {
+    if (saved.schemaVersion !== DOCKER_STATE_SCHEMA_VERSION || !isPlainObject(saved.state)) return null
+    return normalizeDockerStateSnapshot(saved.state)
+  }
+  return normalizeDockerStateSnapshot(saved)
+}
+
+function normalizeDockerStateSnapshot(source) {
+  if (!isPlainObject(source)) return null
+
+  const counters = isPlainObject(source.counters) ? source.counters : {}
+  return {
+    images: isPlainObject(source.images) ? source.images : BASE_IMAGES,
+    containers: Array.isArray(source.containers) ? source.containers : [],
+    volumes: Array.isArray(source.volumes) ? source.volumes : [],
+    networks: Array.isArray(source.networks) && source.networks.length ? source.networks : defaultDockerNetworks(),
+    counters: {
+      container: Number(counters.container) || 1,
+      image: Number(counters.image) || 1,
+      network: Number(counters.network) || 0,
+      volume: Number(counters.volume) || 0,
+      ports: Number(counters.ports) || 4000
+    }
+  }
+}
+
+function applyDockerStateSnapshot(snapshot) {
+  replaceImageDatabase(snapshot.images)
+  CONTAINERS = snapshot.containers
+  VOLUMES = snapshot.volumes
+  NETWORKS = snapshot.networks
+  COUNTER.container = snapshot.counters.container
+  COUNTER.image = snapshot.counters.image
+  NETWORK_COUNTER = snapshot.counters.network
+  VOLUME_COUNTER = snapshot.counters.volume
+  PORTS_COUNTER = snapshot.counters.ports
 }
 
 export function saveDockerState(workspaceId) {
@@ -191,17 +260,8 @@ export function saveDockerState(workspaceId) {
   try {
     if (typeof localStorage === 'undefined') return false
     const payload = {
-      images: IMAGE_DB,
-      containers: CONTAINERS,
-      volumes: VOLUMES,
-      networks: NETWORKS,
-      counters: {
-        container: COUNTER.container,
-        image: COUNTER.image,
-        network: NETWORK_COUNTER,
-        volume: VOLUME_COUNTER,
-        ports: PORTS_COUNTER
-      }
+      schemaVersion: DOCKER_STATE_SCHEMA_VERSION,
+      state: createDockerStateSnapshot()
     }
     localStorage.setItem(dockerStorageKey(workspaceId), JSON.stringify(payload))
     return true
@@ -217,24 +277,10 @@ export function loadDockerState(workspaceId) {
     const raw = localStorage.getItem(dockerStorageKey(workspaceId))
     if (!raw) return false
     const saved = JSON.parse(raw)
-    if (saved && typeof saved === 'object') {
-      replaceImageDatabase(saved.images && typeof saved.images === 'object' ? saved.images : BASE_IMAGES)
-      CONTAINERS = Array.isArray(saved.containers) ? saved.containers : []
-      VOLUMES = Array.isArray(saved.volumes) ? saved.volumes : []
-      NETWORKS = Array.isArray(saved.networks) ? saved.networks : [
-        { name: 'bridge', driver: 'bridge', scope: 'local' },
-        { name: 'host', driver: 'host', scope: 'local' },
-        { name: 'none', driver: 'null', scope: 'local' }
-      ]
-      const c = saved.counters || {}
-      COUNTER.container = c.container || COUNTER.container
-      COUNTER.image = c.image || COUNTER.image
-      NETWORK_COUNTER = c.network || 0
-      VOLUME_COUNTER = c.volume || 0
-      PORTS_COUNTER = c.ports || 4000
-      return true
-    }
-    return false
+    const migrated = migrateDockerState(saved)
+    if (!migrated) return false
+    applyDockerStateSnapshot(migrated)
+    return true
   } catch (e) {
     return false
   }

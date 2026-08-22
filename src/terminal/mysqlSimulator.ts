@@ -25,6 +25,7 @@ export interface MySqlResult {
 export const MYSQL_VERSION = 'mysql  Ver 8.0.36 for Linux on x86_64 (MySQL Community Server - GPL)'
 
 const STORAGE_KEY_PREFIX = 'mysql-sim-state-v1'
+const MYSQL_STATE_SCHEMA_VERSION = 1
 const SYSTEM_DATABASES = ['information_schema', 'mysql']
 
 function createDatabase(name: string, system = false): MySqlDatabase {
@@ -98,7 +99,10 @@ export function saveMySqlState(workspaceId: string): boolean {
   if (!workspaceId) return false
   try {
     if (typeof localStorage === 'undefined') return false
-    localStorage.setItem(storageKey(workspaceId), JSON.stringify(state))
+    localStorage.setItem(storageKey(workspaceId), JSON.stringify({
+      schemaVersion: MYSQL_STATE_SCHEMA_VERSION,
+      state
+    }))
     return true
   } catch (e) {
     return false
@@ -111,12 +115,11 @@ export function loadMySqlState(workspaceId: string): boolean {
     if (typeof localStorage === 'undefined') return false
     const raw = localStorage.getItem(storageKey(workspaceId))
     if (!raw) return false
-    const saved = JSON.parse(raw) as Partial<MySqlState>
-    if (saved && typeof saved === 'object' && saved.databases) {
-      state = normalizeSavedState(saved)
-      return true
-    }
-    return false
+    const saved = JSON.parse(raw)
+    const migrated = migrateMySqlState(saved)
+    if (!migrated) return false
+    state = migrated
+    return true
   } catch (e) {
     return false
   }
@@ -131,6 +134,19 @@ export function clearMySqlState(workspaceId: string): boolean {
   } catch (e) {
     return false
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function migrateMySqlState(saved: unknown): MySqlState | null {
+  if (!isPlainObject(saved)) return null
+  if ('schemaVersion' in saved) {
+    if (saved.schemaVersion !== MYSQL_STATE_SCHEMA_VERSION || !isPlainObject(saved.state)) return null
+    return normalizeSavedState(saved.state as Partial<MySqlState>)
+  }
+  return normalizeSavedState(saved as Partial<MySqlState>)
 }
 
 function normalizeSavedState(saved: Partial<MySqlState>): MySqlState {

@@ -161,6 +161,8 @@ JavaScript 核心模块：
 | `git-state-panel-open` | `GitStatePanel.vue` | Git 抽屉展开状态 |
 | `mysql-state-panel-open` | `MySQLStatePanel.vue` | MySQL 数据面板展开状态 |
 
+Docker、Git、MySQL 的模拟状态使用 `{ schemaVersion: 1, state: ... }` 包裹后写入 localStorage。加载时会先经过对应迁移函数；没有 `schemaVersion` 的旧缓存按 v0 裸状态处理，字段缺失时回填默认值，非法 JSON 或未知版本会放弃恢复并保留当前安全状态。
+
 调试状态恢复问题时，优先检查对应 localStorage 缓存或使用终端/编辑器的重置按钮。
 
 ## 部署模型

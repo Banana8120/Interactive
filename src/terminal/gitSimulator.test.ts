@@ -1,5 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { executeGitCommand, getGitState, resetGitEnvironment } from './gitSimulator'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { executeGitCommand, getGitState, loadGitState, resetGitEnvironment, saveGitState } from './gitSimulator'
+
+const storageValues = new Map<string, string>()
+const workspaceId = 'git-playground'
+const storageKey = `git-sim-state-v1-${workspaceId}`
+
+function stubLocalStorage() {
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => storageValues.get(key) ?? null,
+    setItem: (key: string, value: string) => storageValues.set(key, value),
+    removeItem: (key: string) => storageValues.delete(key)
+  })
+}
 
 function git(input: string) {
   return executeGitCommand(input)
@@ -30,6 +42,8 @@ function commitAll(message: string) {
 describe('git simulator regression coverage', () => {
   beforeEach(() => {
     resetGitForTest()
+    storageValues.clear()
+    stubLocalStorage()
   })
 
   it('initializes a repository, stages files and creates an initial commit', () => {
@@ -97,5 +111,76 @@ describe('git simulator regression coverage', () => {
     expect(state.commits).toEqual({})
     expect(state.staged).toEqual({})
     expect(Object.keys(state.workdir).sort()).toEqual(['README.md', 'app.js', 'index.html'])
+  })
+
+  it('saves Git state with a schema version wrapper', () => {
+    initWithIdentity()
+    commitAll('initial')
+
+    expect(saveGitState(workspaceId)).toBe(true)
+
+    const saved = JSON.parse(storageValues.get(storageKey)!)
+    expect(saved.schemaVersion).toBe(1)
+    expect(saved.state.initialized).toBe(true)
+    expect(saved.state.branches.master).toBeTruthy()
+  })
+
+  it('loads legacy unversioned Git state and normalizes missing fields', () => {
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        initialized: true,
+        branches: { main: 'abc1234' },
+        head: 'main',
+        commits: {
+          abc1234: {
+            hash: 'abc1234',
+            msg: 'legacy',
+            parent: null,
+            files: { 'README.md': 'legacy\n' },
+            author: 'Ada',
+            email: 'ada@example.com',
+            date: 'Jan 01 00:00'
+          }
+        },
+        workdir: { 'README.md': 'legacy\n' }
+      })
+    )
+
+    expect(loadGitState(workspaceId)).toBe(true)
+
+    const state = getGitState()
+    expect(state.initialized).toBe(true)
+    expect(state.head).toBe('main')
+    expect(state.branches).toMatchObject({ main: 'abc1234', master: null })
+    expect(state.config.user).toEqual({ name: '', email: '' })
+    expect(state.staged).toEqual({})
+    expect(state.reflog).toEqual([])
+  })
+
+  it('keeps current Git state when cached JSON is invalid', () => {
+    initWithIdentity()
+    commitAll('initial')
+    const before = getGitState().branches.master
+    storageValues.set(storageKey, '{broken')
+
+    expect(loadGitState(workspaceId)).toBe(false)
+    expect(getGitState().branches.master).toBe(before)
+  })
+
+  it('rejects unsupported Git state schema versions', () => {
+    initWithIdentity()
+    commitAll('initial')
+    const before = getGitState().branches.master
+    storageValues.set(
+      storageKey,
+      JSON.stringify({
+        schemaVersion: 999,
+        state: { initialized: false, branches: { future: 'abc1234' } }
+      })
+    )
+
+    expect(loadGitState(workspaceId)).toBe(false)
+    expect(getGitState().branches.master).toBe(before)
   })
 })
