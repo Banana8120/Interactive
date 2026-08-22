@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { executeMySqlCommand, getMySqlState, loadMySqlState, resetMySqlEnvironment, saveMySqlState } from './mysqlSimulator'
+import {
+  executeMySqlCommand,
+  getMySqlState,
+  loadMySqlState,
+  resetMySqlEnvironment,
+  saveMySqlState
+} from './mysqlSimulator'
 
 const storageValues = new Map<string, string>()
 const workspaceId = 'mysql-playground'
@@ -31,7 +37,9 @@ function setupAnalyticsUsersTable() {
   sql('CREATE DATABASE shop;')
   sql('USE shop;')
   sql('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50), role VARCHAR(20), age INT, score INT);')
-  sql("INSERT INTO users (name, role, age, score) VALUES ('Ada', 'member', 18, 100), ('Bob', 'guest', 15, 70), ('Cora', 'member', 21, 90), ('Dee', 'guest', 30, NULL);")
+  sql(
+    "INSERT INTO users (name, role, age, score) VALUES ('Ada', 'member', 18, 100), ('Bob', 'guest', 15, 70), ('Cora', 'member', 21, 90), ('Dee', 'guest', 30, NULL);"
+  )
 }
 
 describe('mysql simulator regression coverage', () => {
@@ -44,7 +52,9 @@ describe('mysql simulator regression coverage', () => {
   it('creates a database, switches to it and creates a table', () => {
     expect(output('CREATE DATABASE shop;')).toContain('数据库 shop 已创建')
     expect(output('USE shop;')).toContain('Database changed')
-    expect(output('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50), age INT);')).toContain('表 users 已创建')
+    expect(output('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(50), age INT);')).toContain(
+      '表 users 已创建'
+    )
 
     const state = getMySqlState()
     const table = state.databases.shop.tables.users
@@ -76,7 +86,9 @@ describe('mysql simulator regression coverage', () => {
   it('selects count, sum, average, min and max over filtered rows', () => {
     setupAnalyticsUsersTable()
 
-    const selected = output('SELECT COUNT(*), COUNT(score), SUM(score), AVG(score), MIN(age), MAX(age) FROM users WHERE age >= 18;')
+    const selected = output(
+      'SELECT COUNT(*), COUNT(score), SUM(score), AVG(score), MIN(age), MAX(age) FROM users WHERE age >= 18;'
+    )
 
     expect(selected).toContain('COUNT(*)')
     expect(selected).toContain('COUNT(score)')
@@ -95,7 +107,9 @@ describe('mysql simulator regression coverage', () => {
   it('groups rows and orders by an aggregate expression before applying limit', () => {
     setupAnalyticsUsersTable()
 
-    const selected = output('SELECT role, COUNT(*), AVG(score) FROM users WHERE age >= 15 GROUP BY role ORDER BY AVG(score) DESC LIMIT 1;')
+    const selected = output(
+      'SELECT role, COUNT(*), AVG(score) FROM users WHERE age >= 15 GROUP BY role ORDER BY AVG(score) DESC LIMIT 1;'
+    )
 
     expect(selected).toContain('role')
     expect(selected).toContain('COUNT(*)')

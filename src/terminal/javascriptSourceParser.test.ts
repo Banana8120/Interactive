@@ -53,18 +53,18 @@ function demo(user, user) {
   return user
 }`)
 
-    expect(program.diagnostics.map((item) => item.message)).toEqual(expect.arrayContaining([
-      '标识符 user 重复声明。',
-      '参数 user 重复声明。',
-      '第一版暂不支持的语句：return user'
-    ]))
+    expect(program.diagnostics.map((item) => item.message)).toEqual(
+      expect.arrayContaining(['标识符 user 重复声明。', '参数 user 重复声明。', '第一版暂不支持的语句：return user'])
+    )
   })
 
   it('formats indentation without changing the simplified source shape', () => {
-    expect(formatJavaScriptSource(`function rename(obj) {
+    expect(
+      formatJavaScriptSource(`function rename(obj) {
 obj.name = "Bob";
 }
-rename(user);`)).toBe(`function rename(obj) {
+rename(user);`)
+    ).toBe(`function rename(obj) {
     obj.name = "Bob"
 }
 rename(user)`)

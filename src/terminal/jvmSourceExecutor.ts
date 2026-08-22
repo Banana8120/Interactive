@@ -1,10 +1,4 @@
-import type {
-  JvmArrayElementType,
-  JvmHeapArray,
-  JvmHeapObject,
-  JvmState,
-  JvmValue
-} from '@/types'
+import type { JvmArrayElementType, JvmHeapArray, JvmHeapObject, JvmState, JvmValue } from '@/types'
 import {
   cloneJvmState,
   collectJvmGarbage,
@@ -62,10 +56,7 @@ interface Runtime {
 
 const NUMERIC_TYPES = new Set(['int', 'long', 'float', 'double'])
 
-export function executeJvmSource(
-  program: JvmSourceProgram,
-  requestedTargetLine: number
-): JvmSourceExecutionResult {
+export function executeJvmSource(program: JvmSourceProgram, requestedTargetLine: number): JvmSourceExecutionResult {
   const targetLine = Math.max(1, Math.min(program.lineCount, Math.floor(requestedTargetLine || 1)))
   const blockingParseError = program.diagnostics.find((item) => item.line <= targetLine)
   const executionLimit = blockingParseError ? Math.max(0, blockingParseError.line - 1) : targetLine
@@ -96,8 +87,7 @@ export function executeJvmSource(
     }
   }
 
-  const diagnostics = [...program.diagnostics, ...runtime.diagnostics]
-    .sort((a, b) => a.line - b.line)
+  const diagnostics = [...program.diagnostics, ...runtime.diagnostics].sort((a, b) => a.line - b.line)
   const hasReachedError = diagnostics.some((item) => item.line <= targetLine)
   const lastExecutableLine = program.executableLines.at(-1) || program.main?.line || 1
   const status: JvmExecutionStatus = hasReachedError
@@ -112,11 +102,12 @@ export function executeJvmSource(
     targetLine,
     stoppedLine: runtime.stoppedLine,
     status,
-    message: status === 'error'
-      ? `执行在第 ${firstReachedDiagnosticLine(diagnostics, targetLine)} 行前停止`
-      : status === 'completed'
-        ? '已执行到最后一条语句'
-        : `已执行到第 ${runtime.stoppedLine || targetLine} 行`
+    message:
+      status === 'error'
+        ? `执行在第 ${firstReachedDiagnosticLine(diagnostics, targetLine)} 行前停止`
+        : status === 'completed'
+          ? '已执行到最后一条语句'
+          : `已执行到第 ${runtime.stoppedLine || targetLine} 行`
   }
 }
 
@@ -360,8 +351,7 @@ function assignObjectField(
   if (variable.value.kind !== 'reference') return diagnostic('type', line, `${variableName} 不是对象引用。`)
   const entry = runtime.state.heap.entries[variable.value.value]
   if (!entry || entry.kind !== 'object') return diagnostic('runtime', line, `对象 ${variable.value.value} 已不存在。`)
-  const field = runtime.classes.get(entry.className)?.fields
-    .find((item) => item.name === fieldName && !item.isStatic)
+  const field = runtime.classes.get(entry.className)?.fields.find((item) => item.name === fieldName && !item.isStatic)
   if (!field) return diagnostic('name', line, `实例字段 ${entry.className}.${fieldName} 未声明。`)
   if (!isAssignable(field.type, evaluated.type)) {
     return diagnostic('type', line, `字段 ${entry.className}.${fieldName} 不能赋值 ${formatType(evaluated.type)}。`)
@@ -399,7 +389,13 @@ function evaluateExpression(
     }
     const index = Number(arrayAccess[2])
     if (index >= entry.length) {
-      return { diagnostic: diagnostic('runtime', line, `ArrayIndexOutOfBoundsException: 索引 ${index}，数组长度 ${entry.length}`) }
+      return {
+        diagnostic: diagnostic(
+          'runtime',
+          line,
+          `ArrayIndexOutOfBoundsException: 索引 ${index}，数组长度 ${entry.length}`
+        )
+      }
     }
     return {
       type: { name: variable.type.name, array: false },
@@ -420,10 +416,12 @@ function evaluateExpression(
     }
     const variable = scope.variables.get(owner)
     if (!variable) return { diagnostic: diagnostic('name', line, `局部变量 ${owner} 未声明。`) }
-    if (variable.value.kind === 'null') return { diagnostic: diagnostic('runtime', line, `NullPointerException: ${owner}`) }
+    if (variable.value.kind === 'null')
+      return { diagnostic: diagnostic('runtime', line, `NullPointerException: ${owner}`) }
     if (variable.value.kind !== 'reference') return { diagnostic: diagnostic('type', line, `${owner} 不是对象引用。`) }
     const entry = runtime.state.heap.entries[variable.value.value]
-    if (!entry || entry.kind !== 'object') return { diagnostic: diagnostic('runtime', line, `对象 ${variable.value.value} 已不存在。`) }
+    if (!entry || entry.kind !== 'object')
+      return { diagnostic: diagnostic('runtime', line, `对象 ${variable.value.value} 已不存在。`) }
     const field = runtime.classes.get(entry.className)?.fields.find((item) => item.name === fieldName && !item.isStatic)
     if (!field) return { diagnostic: diagnostic('name', line, `实例字段 ${entry.className}.${fieldName} 未声明。`) }
     return { type: field.type, value: cloneValue(entry.fields[fieldName]) }
@@ -531,7 +529,9 @@ function defaultValue(type: JvmSourceType): JvmValue {
 
 function isAssignable(target: JvmSourceType, source: TypedValue['type']) {
   if (source.name === 'null') {
-    return target.array || target.name === 'String' || !['boolean', 'int', 'long', 'float', 'double'].includes(target.name)
+    return (
+      target.array || target.name === 'String' || !['boolean', 'int', 'long', 'float', 'double'].includes(target.name)
+    )
   }
   if (target.array || source.array) return target.array === source.array && target.name === source.name
   if (NUMERIC_TYPES.has(target.name) && NUMERIC_TYPES.has(source.name)) return true
@@ -543,16 +543,14 @@ function isKnownType(type: JvmSourceType, classes: Map<string, JvmSourceClass>) 
 }
 
 function typeUnitSize(type: JvmSourceType) {
-  if (type.array || type.name === 'String' || !['boolean', 'int', 'long', 'float', 'double'].includes(type.name)) return 4
+  if (type.array || type.name === 'String' || !['boolean', 'int', 'long', 'float', 'double'].includes(type.name))
+    return 4
   if (type.name === 'boolean') return 1
   if (type.name === 'long' || type.name === 'double') return 8
   return 4
 }
 
-function toHeapArrayType(
-  typeName: string,
-  classes: Map<string, JvmSourceClass>
-): JvmArrayElementType {
+function toHeapArrayType(typeName: string, classes: Map<string, JvmSourceClass>): JvmArrayElementType {
   if (classes.has(typeName)) return 'ref'
   if (typeName === 'String') return 'string'
   return typeName as JvmArrayElementType
@@ -563,21 +561,16 @@ function findFrame(state: JvmState, scope: RuntimeScope) {
 }
 
 function cloneVariables(variables: Map<string, RuntimeVariable>) {
-  return new Map([...variables].map(([name, variable]) => [
-    name,
-    { type: { ...variable.type }, value: cloneValue(variable.value) }
-  ]))
+  return new Map(
+    [...variables].map(([name, variable]) => [name, { type: { ...variable.type }, value: cloneValue(variable.value) }])
+  )
 }
 
 function cloneValue(value: JvmValue): JvmValue {
   return { ...value } as JvmValue
 }
 
-function diagnostic(
-  stage: JvmSourceDiagnostic['stage'],
-  line: number,
-  message: string
-): JvmSourceDiagnostic {
+function diagnostic(stage: JvmSourceDiagnostic['stage'], line: number, message: string): JvmSourceDiagnostic {
   return { stage, line, message }
 }
 

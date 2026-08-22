@@ -35,7 +35,9 @@
             </div>
             <div class="state-item">
               <span class="state-label">当前数据库</span>
-              <span class="state-value" :class="{ muted: !env.currentDatabase }">{{ env.currentDatabase || '未选择' }}</span>
+              <span class="state-value" :class="{ muted: !env.currentDatabase }">{{
+                env.currentDatabase || '未选择'
+              }}</span>
             </div>
             <div class="state-item">
               <span class="state-label">数据库数</span>
@@ -217,14 +219,14 @@ const currentDb = computed<MySqlDatabase | null>(() => {
   return env.value.databases[env.value.currentDatabase] || null
 })
 
-const tableNames = computed(() => currentDb.value ? Object.keys(currentDb.value.tables).sort() : [])
+const tableNames = computed(() => (currentDb.value ? Object.keys(currentDb.value.tables).sort() : []))
 
 const selectedTable = computed<MySqlTable | null>(() => {
   if (!currentDb.value || !selectedTableName.value) return null
   return currentDb.value.tables[selectedTableName.value] || null
 })
 
-const previewRows = computed(() => selectedTable.value ? selectedTable.value.rows.slice(0, 10) : [])
+const previewRows = computed(() => (selectedTable.value ? selectedTable.value.rows.slice(0, 10) : []))
 const recentHistory = computed(() => env.value.history.slice(-6).reverse())
 
 watch(

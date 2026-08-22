@@ -13,49 +13,49 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'docker-playground',
     component: () => import('@/views/DockerPlaygroundView.vue'),
-    meta: { title: 'Docker 模拟终端', module: 'docker' },
+    meta: { title: 'Docker 模拟终端', module: 'docker' }
   },
   {
     path: '/chapter/:chapterId',
-    redirect: '/',
+    redirect: '/'
   },
   {
     path: '/lesson/:lessonId',
-    redirect: '/',
+    redirect: '/'
   },
   {
     path: '/git',
     name: 'git-playground',
     component: () => import('@/views/GitPlaygroundView.vue'),
-    meta: { title: 'Git 模拟终端', module: 'git' },
+    meta: { title: 'Git 模拟终端', module: 'git' }
   },
   {
     path: '/git/lesson/:lessonId',
-    redirect: '/git',
+    redirect: '/git'
   },
   {
     path: '/mysql',
     name: 'mysql-playground',
     component: () => import('@/views/MySQLPlaygroundView.vue'),
-    meta: { title: 'MySQL 模拟终端', module: 'mysql' },
+    meta: { title: 'MySQL 模拟终端', module: 'mysql' }
   },
   {
     path: '/jvm',
     name: 'jvm-playground',
     component: () => import('@/views/JvmPlaygroundView.vue'),
-    meta: { title: 'JVM 内存模拟', module: 'jvm' },
+    meta: { title: 'JVM 内存模拟', module: 'jvm' }
   },
   {
     path: '/javascript',
     name: 'javascript-playground',
     component: () => import('@/views/JavaScriptPlaygroundView.vue'),
-    meta: { title: 'JavaScript 执行上下文', module: 'javascript' },
+    meta: { title: 'JavaScript 执行上下文', module: 'javascript' }
   },
   {
     path: '/mysql/lesson/:lessonId',
-    redirect: '/mysql',
+    redirect: '/mysql'
   },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({
@@ -63,7 +63,7 @@ const router = createRouter({
   routes,
   scrollBehavior() {
     return { top: 0 }
-  },
+  }
 })
 
 router.afterEach((to) => {

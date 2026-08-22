@@ -38,9 +38,7 @@ export interface JavaScriptFunctionDeclaration {
 }
 
 export type JavaScriptExecutableStatement =
-  | JavaScriptVariableStatement
-  | JavaScriptAssignmentStatement
-  | JavaScriptCallStatement
+  JavaScriptVariableStatement | JavaScriptAssignmentStatement | JavaScriptCallStatement
 
 export type JavaScriptSourceStatement = JavaScriptExecutableStatement | JavaScriptFunctionDeclaration
 
@@ -147,7 +145,10 @@ export function formatJavaScriptSource(source: string): string {
     if (text.endsWith('{')) depth++
     return line
   })
-  return formatted.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()
+  return formatted
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()
 }
 
 function parseExecutableStatement(
@@ -191,7 +192,9 @@ function parseExecutableStatement(
     return {
       kind: 'call',
       callee: call[1],
-      args: splitTopLevel(call[2], ',').map((item) => item.trim()).filter(Boolean),
+      args: splitTopLevel(call[2], ',')
+        .map((item) => item.trim())
+        .filter(Boolean),
       line
     }
   }
@@ -200,11 +203,7 @@ function parseExecutableStatement(
   return null
 }
 
-function parseParams(
-  raw: string,
-  line: number,
-  diagnostics: JavaScriptSourceDiagnostic[]
-) {
+function parseParams(raw: string, line: number, diagnostics: JavaScriptSourceDiagnostic[]) {
   if (!raw.trim()) return []
   const params = raw.split(',').map((item) => item.trim())
   const names = new Set<string>()
@@ -222,10 +221,7 @@ function parseParams(
   return params.filter((item) => IDENTIFIER_ONLY.test(item))
 }
 
-function validateNames(
-  statements: JavaScriptSourceStatement[],
-  diagnostics: JavaScriptSourceDiagnostic[]
-) {
+function validateNames(statements: JavaScriptSourceStatement[], diagnostics: JavaScriptSourceDiagnostic[]) {
   const globalNames = new Set<string>()
   for (const statement of statements) {
     if (statement.kind === 'function') {
@@ -246,10 +242,7 @@ function validateNames(
   }
 }
 
-function validateFunctionBody(
-  functionNode: JavaScriptFunctionDeclaration,
-  diagnostics: JavaScriptSourceDiagnostic[]
-) {
+function validateFunctionBody(functionNode: JavaScriptFunctionDeclaration, diagnostics: JavaScriptSourceDiagnostic[]) {
   const names = new Set(functionNode.params)
   for (const statement of functionNode.body) {
     if (statement.kind !== 'variable') continue

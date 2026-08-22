@@ -13,13 +13,17 @@
       <div class="terminal-actions">
         <n-tooltip placement="bottom">
           <template #trigger>
-            <button class="icon-btn" @click="clearScreen"><n-icon><Delete /></n-icon></button>
+            <button class="icon-btn" @click="clearScreen">
+              <n-icon><Delete /></n-icon>
+            </button>
           </template>
           清空屏幕
         </n-tooltip>
         <n-tooltip placement="bottom">
           <template #trigger>
-            <button class="icon-btn" @click="resetEnv"><n-icon><Refresh /></n-icon></button>
+            <button class="icon-btn" @click="resetEnv">
+              <n-icon><Refresh /></n-icon>
+            </button>
           </template>
           重置数据库环境
         </n-tooltip>
@@ -67,15 +71,11 @@
       </div>
 
       <div class="smart-suggest" v-if="smartSuggestions.length">
-        <button
-          v-for="s in smartSuggestions"
-          :key="s"
-          class="smart-chip"
-          @click.stop="applySuggestion(s)"
-        >{{ s }}</button>
+        <button v-for="s in smartSuggestions" :key="s" class="smart-chip" @click.stop="applySuggestion(s)">
+          {{ s }}
+        </button>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -207,22 +207,25 @@ async function submit() {
     pushBlock({ typing: true, lines: [] })
   }
 
-  setTimeout(() => {
-    if (result.delay && history.value.length) {
-      const last = history.value[history.value.length - 1]
-      if (last && last.typing) history.value.pop()
-    }
+  setTimeout(
+    () => {
+      if (result.delay && history.value.length) {
+        const last = history.value[history.value.length - 1]
+        if (last && last.typing) history.value.pop()
+      }
 
-    const lines = Array.isArray(result.lines) ? result.lines : [String(result.lines)]
-    pushBlock({ input: undefined, error: result.type === 'error', lines })
+      const lines = Array.isArray(result.lines) ? result.lines : [String(result.lines)]
+      pushBlock({ input: undefined, error: result.type === 'error', lines })
 
-    busy.value = false
-    typingLines.value = []
-    const ok = result.type !== 'error'
-    errorStreak = ok ? 0 : errorStreak + 1
-    emit('command-executed', { input, ok, errorStreak })
-    scrollToBottom()
-  }, Math.min(delay, 2000))
+      busy.value = false
+      typingLines.value = []
+      const ok = result.type !== 'error'
+      errorStreak = ok ? 0 : errorStreak + 1
+      emit('command-executed', { input, ok, errorStreak })
+      scrollToBottom()
+    },
+    Math.min(delay, 2000)
+  )
 }
 
 function historyBack() {
@@ -260,8 +263,14 @@ function resetEnv() {
 const highlight = (line: string): string => {
   if (!line) return '&nbsp;'
   let s = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  s = s.replace(/\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|COUNT|SUM|AVG|MIN|MAX|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE|DATABASE|TABLE|USE|SHOW|DESC|ALTER|TRUNCATE|DROP|PRIMARY KEY|AUTO_INCREMENT|VARCHAR|INT|NOT NULL)\b/gi, '<span class="hl-sql">$&</span>')
-  s = s.replace(/\b(ERROR|Unknown|Duplicate|syntax|No database selected|not supported)\b/gi, '<span class="hl-err">$&</span>')
+  s = s.replace(
+    /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|COUNT|SUM|AVG|MIN|MAX|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE|DATABASE|TABLE|USE|SHOW|DESC|ALTER|TRUNCATE|DROP|PRIMARY KEY|AUTO_INCREMENT|VARCHAR|INT|NOT NULL)\b/gi,
+    '<span class="hl-sql">$&</span>'
+  )
+  s = s.replace(
+    /\b(ERROR|Unknown|Duplicate|syntax|No database selected|not supported)\b/gi,
+    '<span class="hl-err">$&</span>'
+  )
   s = s.replace(/\b(Query OK|Database changed|Welcome|Empty set)\b/g, '<span class="hl-ok">$&</span>')
   return s
 }
@@ -276,7 +285,7 @@ onMounted(() => {
     lines: [
       ' __  __       ____   ___  _     ',
       '|  \\/  |_   _/ ___| / _ \\| |    ',
-      "| |\\/| | | | \\___ \\| | | | |    ",
+      '| |\\/| | | | \\___ \\| | | | |    ',
       '| |  | | |_| |___) | |_| | |___ ',
       '|_|  |_|\\__, |____/ \\__\\_\\_____|',
       '        |___/                   ',
@@ -325,9 +334,15 @@ onMounted(() => {
   border-radius: 50%;
 }
 
-.dot.red { background: #ff5f57; }
-.dot.yellow { background: #febc2e; }
-.dot.green { background: #28c840; }
+.dot.red {
+  background: #ff5f57;
+}
+.dot.yellow {
+  background: #febc2e;
+}
+.dot.green {
+  background: #28c840;
+}
 
 .terminal-title {
   color: #a7c8d9;
@@ -440,7 +455,9 @@ onMounted(() => {
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 .typing-line {
@@ -470,9 +487,17 @@ onMounted(() => {
   color: #fff;
 }
 
-.hl-sql { color: #8fe5ff; font-weight: 700; }
-.hl-err { color: #ff8a8a; font-weight: 700; }
-.hl-ok { color: #91f2bc; }
+.hl-sql {
+  color: #8fe5ff;
+  font-weight: 700;
+}
+.hl-err {
+  color: #ff8a8a;
+  font-weight: 700;
+}
+.hl-ok {
+  color: #91f2bc;
+}
 
 @media (max-width: 768px) {
   .terminal-output {

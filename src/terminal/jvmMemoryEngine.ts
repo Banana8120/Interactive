@@ -24,10 +24,8 @@ export function cloneJvmState(state: JvmState): JvmState {
 }
 
 export function getJvmUsage(state: JvmState) {
-  const methodArea = Object.values(state.methodArea.classes)
-    .reduce((total, item) => total + item.size, 0)
-  const heap = Object.values(state.heap.entries)
-    .reduce((total, item) => total + item.size, 0)
+  const methodArea = Object.values(state.methodArea.classes).reduce((total, item) => total + item.size, 0)
+  const heap = Object.values(state.heap.entries).reduce((total, item) => total + item.size, 0)
   const stacks = Object.fromEntries(
     Object.values(state.threads).map((thread) => [
       thread.id,
@@ -114,12 +112,7 @@ export function ensureJvmHeapCapacity(
   }
 }
 
-export function createStackFrame(
-  state: JvmState,
-  className: string,
-  methodName: string,
-  size = 12
-): JvmStackFrame {
+export function createStackFrame(state: JvmState, className: string, methodName: string, size = 12): JvmStackFrame {
   const frame: JvmStackFrame = {
     id: `f${state.counters.frame}`,
     className,

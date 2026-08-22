@@ -14,13 +14,17 @@
       <div class="terminal-actions">
         <n-tooltip placement="bottom">
           <template #trigger>
-            <button class="icon-btn" @click="clearScreen"><n-icon><Delete /></n-icon></button>
+            <button class="icon-btn" @click="clearScreen">
+              <n-icon><Delete /></n-icon>
+            </button>
           </template>
           清空屏幕
         </n-tooltip>
         <n-tooltip placement="bottom">
           <template #trigger>
-            <button class="icon-btn" @click="resetEnv"><n-icon><Refresh /></n-icon></button>
+            <button class="icon-btn" @click="resetEnv">
+              <n-icon><Refresh /></n-icon>
+            </button>
           </template>
           重置仓库环境
         </n-tooltip>
@@ -68,7 +72,6 @@
         <span class="term-cursor static"></span>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -140,23 +143,26 @@ async function submit() {
     pushBlock({ typing: true, lines: [] })
   }
 
-  setTimeout(() => {
-    if (result.delay > 0 && history.value.length) {
-      const last = history.value[history.value.length - 1]
-      if (last && last.typing) history.value.pop()
-    }
+  setTimeout(
+    () => {
+      if (result.delay > 0 && history.value.length) {
+        const last = history.value[history.value.length - 1]
+        if (last && last.typing) history.value.pop()
+      }
 
-    const lines = Array.isArray(result.lines) ? result.lines : [String(result.lines)]
-    pushBlock({ input: undefined, error: result.type === 'error', lines })
+      const lines = Array.isArray(result.lines) ? result.lines : [String(result.lines)]
+      pushBlock({ input: undefined, error: result.type === 'error', lines })
 
-    busy.value = false
-    typingLines.value = []
-    const ok = result.type !== 'error'
-    // 连续错误计数：用于“卡住”检测（触发任务面板自动提示）
-    errorStreak = ok ? 0 : errorStreak + 1
-    emit('command-executed', { input, ok, errorStreak })
-    scrollToBottom()
-  }, Math.min(delay, 2000))
+      busy.value = false
+      typingLines.value = []
+      const ok = result.type !== 'error'
+      // 连续错误计数：用于“卡住”检测（触发任务面板自动提示）
+      errorStreak = ok ? 0 : errorStreak + 1
+      emit('command-executed', { input, ok, errorStreak })
+      scrollToBottom()
+    },
+    Math.min(delay, 2000)
+  )
 }
 
 function historyBack() {
@@ -178,16 +184,45 @@ function historyForward() {
 }
 
 const GIT_SUBS = [
-  'git init', 'git status', 'git add ', 'git commit -m ', 'git log --oneline',
-  'git diff', 'git branch ', 'git checkout ', 'git switch ', 'git merge ',
-  'git remote add origin ', 'git push', 'git pull', 'git tag -a ',
-  'git stash', 'git stash list', 'git stash pop', 'git reset --hard ',
-  'git revert ', 'git cherry-pick ', 'git reflog', 'git rm ', 'git mv ',
-  'git config --global user.name ', 'git config --global user.email ', 'git show ',
-  'git grep -n ', 'git blame ', 'git shortlog -s -n', 'git archive -o project.tar HEAD',
-  'git worktree list', 'git worktree add ', 'git worktree remove ',
-  'git bisect start', 'git bisect good ', 'git bisect bad ', 'git bisect reset',
-  'git gc', 'git fsck'
+  'git init',
+  'git status',
+  'git add ',
+  'git commit -m ',
+  'git log --oneline',
+  'git diff',
+  'git branch ',
+  'git checkout ',
+  'git switch ',
+  'git merge ',
+  'git remote add origin ',
+  'git push',
+  'git pull',
+  'git tag -a ',
+  'git stash',
+  'git stash list',
+  'git stash pop',
+  'git reset --hard ',
+  'git revert ',
+  'git cherry-pick ',
+  'git reflog',
+  'git rm ',
+  'git mv ',
+  'git config --global user.name ',
+  'git config --global user.email ',
+  'git show ',
+  'git grep -n ',
+  'git blame ',
+  'git shortlog -s -n',
+  'git archive -o project.tar HEAD',
+  'git worktree list',
+  'git worktree add ',
+  'git worktree remove ',
+  'git bisect start',
+  'git bisect good ',
+  'git bisect bad ',
+  'git bisect reset',
+  'git gc',
+  'git fsck'
 ]
 
 function autocomplete() {
@@ -195,7 +230,10 @@ function autocomplete() {
   if (!base) return
   // 补全 git 子命令
   const hit = GIT_SUBS.find((c) => c.startsWith(base) && c !== base)
-  if (hit) { current.value = hit; return }
+  if (hit) {
+    current.value = hit
+    return
+  }
   // 补全分支名
   const m = base.match(/^(git (?:checkout|switch|merge|branch -d|branch)\s+)(\S*)$/)
   if (m) {
@@ -281,9 +319,15 @@ onMounted(() => {
   border-radius: 50%;
 }
 
-.dot.red { background: #ff5f57; }
-.dot.yellow { background: #febc2e; }
-.dot.green { background: #28c840; }
+.dot.red {
+  background: #ff5f57;
+}
+.dot.yellow {
+  background: #febc2e;
+}
+.dot.green {
+  background: #28c840;
+}
 
 .terminal-title {
   color: #9fb3c8;
@@ -402,12 +446,21 @@ onMounted(() => {
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
-.hl-cmd { color: #7db9ff; }
-.hl-err { color: #ff8a8a; font-weight: 600; }
-.hl-hash { color: #c7a6ff; }
+.hl-cmd {
+  color: #7db9ff;
+}
+.hl-err {
+  color: #ff8a8a;
+  font-weight: 600;
+}
+.hl-hash {
+  color: #c7a6ff;
+}
 
 .typing-line {
   color: #8fa5bd;
@@ -425,4 +478,3 @@ onMounted(() => {
   }
 }
 </style>
-

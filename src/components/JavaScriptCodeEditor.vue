@@ -41,7 +41,8 @@
               current: line === executionLine,
               error: diagnosticLines.has(line)
             }"
-          >{{ line }}</span>
+            >{{ line }}</span
+          >
         </div>
       </div>
 
@@ -83,7 +84,9 @@
           type="button"
           class="diagnostic-item"
           @click="jumpToLine(diagnostic.line)"
-        >第 {{ diagnostic.line }} 行：{{ diagnostic.message }}</button>
+        >
+          第 {{ diagnostic.line }} 行：{{ diagnostic.message }}
+        </button>
       </template>
       <template v-else>
         <span class="clean-mark">✓</span>
@@ -119,17 +122,25 @@ const highlightRef = ref<HTMLElement | null>(null)
 const gutterRef = ref<HTMLElement | null>(null)
 const lineCount = computed(() => props.modelValue.split('\n').length)
 const diagnosticLines = computed(() => new Set(props.diagnostics.map((item) => item.line)))
-const highlightedLines = computed(() => props.modelValue.split('\n').map((line, index) => ({
-  number: index + 1,
-  html: highlightLine(line) || '&nbsp;'
-})))
-const statusLabel = computed(() => ({
-  paused: '已暂停',
-  completed: '已运行',
-  error: '有错误'
-}[props.status]))
+const highlightedLines = computed(() =>
+  props.modelValue.split('\n').map((line, index) => ({
+    number: index + 1,
+    html: highlightLine(line) || '&nbsp;'
+  }))
+)
+const statusLabel = computed(
+  () =>
+    ({
+      paused: '已暂停',
+      completed: '已运行',
+      error: '有错误'
+    })[props.status]
+)
 
-watch(() => props.modelValue, () => nextTick(syncScroll))
+watch(
+  () => props.modelValue,
+  () => nextTick(syncScroll)
+)
 
 function onInput(event: Event) {
   emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
@@ -194,7 +205,10 @@ function highlightLine(line: string) {
         const character = line[end]
         if (escaped) escaped = false
         else if (character === '\\') escaped = true
-        else if (character === quote) { end++; break }
+        else if (character === quote) {
+          end++
+          break
+        }
         end++
       }
       result += `<span class="token-string">${escapeHtml(line.slice(index, end))}</span>`
@@ -203,14 +217,8 @@ function highlightLine(line: string) {
     }
     const word = line.slice(index).match(/^[A-Za-z_$][\w$]*/)?.[0]
     if (word) {
-      const tokenClass = KEYWORDS.has(word)
-        ? 'token-keyword'
-        : LITERALS.has(word)
-          ? 'token-literal'
-          : ''
-      result += tokenClass
-        ? `<span class="${tokenClass}">${escapeHtml(word)}</span>`
-        : escapeHtml(word)
+      const tokenClass = KEYWORDS.has(word) ? 'token-keyword' : LITERALS.has(word) ? 'token-literal' : ''
+      result += tokenClass ? `<span class="${tokenClass}">${escapeHtml(word)}</span>` : escapeHtml(word)
       index += word.length
       continue
     }
@@ -230,9 +238,7 @@ function escapeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-const KEYWORDS = new Set([
-  'let', 'const', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'class', 'new'
-])
+const KEYWORDS = new Set(['let', 'const', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'class', 'new'])
 const LITERALS = new Set(['true', 'false', 'null', 'undefined'])
 
 onMounted(() => {
@@ -260,11 +266,24 @@ onMounted(() => {
   border-bottom: 1px solid #353824;
 }
 
-.dots { display: flex; gap: 7px; }
-.dot { width: 11px; height: 11px; border-radius: 50%; }
-.dot.red { background: #ff5f57; }
-.dot.yellow { background: #febc2e; }
-.dot.green { background: #28c840; }
+.dots {
+  display: flex;
+  gap: 7px;
+}
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.dot.red {
+  background: #ff5f57;
+}
+.dot.yellow {
+  background: #febc2e;
+}
+.dot.green {
+  background: #28c840;
+}
 
 .editor-title {
   display: flex;
@@ -301,9 +320,20 @@ onMounted(() => {
   font-size: 11px;
 }
 
-.action-btn.primary { color: #1d2117; background: #f0db4f; }
-.action-btn:hover, .icon-btn:hover { color: #fff; background: #405343; }
-.icon-btn { width: 30px; display: grid; place-items: center; }
+.action-btn.primary {
+  color: #1d2117;
+  background: #f0db4f;
+}
+.action-btn:hover,
+.icon-btn:hover {
+  color: #fff;
+  background: #405343;
+}
+.icon-btn {
+  width: 30px;
+  display: grid;
+  place-items: center;
+}
 
 .editor-status {
   height: 34px;
@@ -323,11 +353,28 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.status-paused { color: #f3de69; background: rgba(240, 219, 79, 0.14); }
-.status-completed { color: #89e0ba; background: rgba(63, 181, 132, 0.14); }
-.status-error { color: #ff9cab; background: rgba(236, 85, 107, 0.14); }
-.status-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.line-position { margin-left: auto; flex-shrink: 0; font-family: Consolas, monospace; }
+.status-paused {
+  color: #f3de69;
+  background: rgba(240, 219, 79, 0.14);
+}
+.status-completed {
+  color: #89e0ba;
+  background: rgba(63, 181, 132, 0.14);
+}
+.status-error {
+  color: #ff9cab;
+  background: rgba(236, 85, 107, 0.14);
+}
+.status-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.line-position {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: Consolas, monospace;
+}
 
 .editor-layout {
   height: 520px;
@@ -341,15 +388,29 @@ onMounted(() => {
   color: #656853;
   background: #101213;
   border-right: 1px solid #2b2f24;
-  font: 12px/22px Consolas, "Cascadia Code", monospace;
+  font:
+    12px/22px Consolas,
+    'Cascadia Code',
+    monospace;
   text-align: right;
   user-select: none;
 }
 
-.gutter-inner { padding: 14px 9px 18px 0; will-change: transform; }
-.gutter-inner span { display: block; height: 22px; }
-.gutter-inner span.current { color: #f0db4f; font-weight: 700; }
-.gutter-inner span.error { color: #ff7187; }
+.gutter-inner {
+  padding: 14px 9px 18px 0;
+  will-change: transform;
+}
+.gutter-inner span {
+  display: block;
+  height: 22px;
+}
+.gutter-inner span.current {
+  color: #f0db4f;
+  font-weight: 700;
+}
+.gutter-inner span.error {
+  color: #ff7187;
+}
 
 .code-viewport {
   min-width: 0;
@@ -362,7 +423,11 @@ onMounted(() => {
 .code-input {
   margin: 0;
   border: 0;
-  font: 13px/22px Consolas, "Cascadia Code", "SFMono-Regular", monospace;
+  font:
+    13px/22px Consolas,
+    'Cascadia Code',
+    'SFMono-Regular',
+    monospace;
   tab-size: 4;
   white-space: pre;
 }
@@ -387,13 +452,30 @@ onMounted(() => {
   padding: 0 16px;
 }
 
-.code-line.current { background: rgba(240, 219, 79, 0.12); }
-.code-line.error { background: rgba(225, 70, 94, 0.12); box-shadow: inset 2px 0 #e84d67; }
-.code-line :deep(.token-keyword) { color: #f0db4f; font-weight: 700; }
-.code-line :deep(.token-string) { color: #8bd7a6; }
-.code-line :deep(.token-number) { color: #79c8ff; }
-.code-line :deep(.token-literal) { color: #ef8eaa; }
-.code-line :deep(.token-comment) { color: #6f7d70; font-style: italic; }
+.code-line.current {
+  background: rgba(240, 219, 79, 0.12);
+}
+.code-line.error {
+  background: rgba(225, 70, 94, 0.12);
+  box-shadow: inset 2px 0 #e84d67;
+}
+.code-line :deep(.token-keyword) {
+  color: #f0db4f;
+  font-weight: 700;
+}
+.code-line :deep(.token-string) {
+  color: #8bd7a6;
+}
+.code-line :deep(.token-number) {
+  color: #79c8ff;
+}
+.code-line :deep(.token-literal) {
+  color: #ef8eaa;
+}
+.code-line :deep(.token-comment) {
+  color: #6f7d70;
+  font-style: italic;
+}
 
 .code-input {
   width: 100%;
@@ -412,7 +494,9 @@ onMounted(() => {
   scrollbar-color: #4d513d transparent;
 }
 
-.code-input::selection { background: rgba(240, 219, 79, 0.26); }
+.code-input::selection {
+  background: rgba(240, 219, 79, 0.26);
+}
 
 .diagnostic-bar {
   min-height: 38px;
@@ -427,9 +511,19 @@ onMounted(() => {
   font-size: 10px;
 }
 
-.diagnostic-bar.clean { color: #8fcdb8; background: #14211e; border-color: #24453c; }
-.diagnostic-count { flex-shrink: 0; font-weight: 700; }
-.clean-mark { font-size: 13px; font-weight: 800; }
+.diagnostic-bar.clean {
+  color: #8fcdb8;
+  background: #14211e;
+  border-color: #24453c;
+}
+.diagnostic-count {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+.clean-mark {
+  font-size: 13px;
+  font-weight: 800;
+}
 
 .diagnostic-item {
   min-width: 0;
@@ -446,14 +540,36 @@ onMounted(() => {
 }
 
 @media (max-width: 700px) {
-  .editor-bar { grid-template-columns: auto 1fr; gap: 8px; padding: 7px 9px; }
-  .dots { display: none; }
-  .editor-title { justify-self: start; }
-  .editor-actions { min-width: 0; }
-  .action-btn { padding: 0 7px; }
-  .action-btn .n-icon { display: none; }
-  .editor-layout { height: 430px; grid-template-columns: 40px minmax(0, 1fr); }
-  .highlight-layer, .code-input { font-size: 12px; }
-  .diagnostic-item:nth-of-type(n + 2) { display: none; }
+  .editor-bar {
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 7px 9px;
+  }
+  .dots {
+    display: none;
+  }
+  .editor-title {
+    justify-self: start;
+  }
+  .editor-actions {
+    min-width: 0;
+  }
+  .action-btn {
+    padding: 0 7px;
+  }
+  .action-btn .n-icon {
+    display: none;
+  }
+  .editor-layout {
+    height: 430px;
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .highlight-layer,
+  .code-input {
+    font-size: 12px;
+  }
+  .diagnostic-item:nth-of-type(n + 2) {
+    display: none;
+  }
 }
 </style>

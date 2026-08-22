@@ -38,7 +38,12 @@ describe('jvmSourceParser', () => {
     })
     expect(program.main).toMatchObject({ className: 'Main', line: 9, endLine: 18 })
     expect(program.main?.statements.map((item) => item.kind)).toEqual([
-      'variable', 'assignment', 'variable', 'assignment', 'thread', 'gc'
+      'variable',
+      'assignment',
+      'variable',
+      'assignment',
+      'thread',
+      'gc'
     ])
     expect(program.main?.statements[4]).toMatchObject({
       kind: 'thread',
@@ -72,11 +77,9 @@ describe('jvmSourceParser', () => {
   }
 }`)
 
-    expect(program.diagnostics.map((item) => item.message)).toEqual(expect.arrayContaining([
-      '未知类型：Missing',
-      '字段 Main.value 重复声明。',
-      '不支持的语句：if (true) value = 1'
-    ]))
+    expect(program.diagnostics.map((item) => item.message)).toEqual(
+      expect.arrayContaining(['未知类型：Missing', '字段 Main.value 重复声明。', '不支持的语句：if (true) value = 1'])
+    )
   })
 
   it('reports missing semicolons, unmatched braces and incomplete blocks', () => {
@@ -91,11 +94,13 @@ describe('jvmSourceParser', () => {
   })
 
   it('formats indentation without changing statements', () => {
-    expect(formatJvmSource(`class Main {
+    expect(
+      formatJvmSource(`class Main {
 static void main() {
 int value = 1;
 }
-}`)).toBe(`class Main {
+}`)
+    ).toBe(`class Main {
     static void main() {
         int value = 1;
     }

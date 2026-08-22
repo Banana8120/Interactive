@@ -45,7 +45,11 @@ describe('jvmSourceExecutor', () => {
     })
     expect(state.heap.entries['@a1']).toMatchObject({
       kind: 'array',
-      elements: [{ kind: 'number', value: 100 }, { kind: 'number', value: 0 }, { kind: 'number', value: 0 }]
+      elements: [
+        { kind: 'number', value: 100 },
+        { kind: 'number', value: 0 },
+        { kind: 'number', value: 0 }
+      ]
     })
   })
 

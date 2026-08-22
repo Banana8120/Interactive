@@ -72,11 +72,13 @@ describe('javascriptSourceExecutor', () => {
     const result = execute(`let user = { name: "Alice" }
 let holder = { current: user }`)
 
-    expect(result.state.references).toEqual(expect.arrayContaining([
-      expect.objectContaining({ fromKind: 'scope', slot: 'user', toId: '@o1' }),
-      expect.objectContaining({ fromKind: 'scope', slot: 'holder', toId: '@o2' }),
-      expect.objectContaining({ fromKind: 'heap', fromId: '@o2', slot: 'current', toId: '@o1' })
-    ]))
+    expect(result.state.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fromKind: 'scope', slot: 'user', toId: '@o1' }),
+        expect.objectContaining({ fromKind: 'scope', slot: 'holder', toId: '@o2' }),
+        expect.objectContaining({ fromKind: 'heap', fromId: '@o2', slot: 'current', toId: '@o1' })
+      ])
+    )
   })
 
   it('stops before const reassignment and leaves the failing statement atomic', () => {
@@ -98,10 +100,13 @@ name.first = "A"`)
   })
 
   it('reports a function body line that has no call path', () => {
-    const result = execute(`function rename(obj) {
+    const result = execute(
+      `function rename(obj) {
   obj.name = "Bob"
 }
-let user = { name: "Alice" }`, 2)
+let user = { name: "Alice" }`,
+      2
+    )
 
     expect(result.status).toBe('error')
     expect(result.diagnostics[0].message).toContain('没有找到调用 rename()')

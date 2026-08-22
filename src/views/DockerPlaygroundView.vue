@@ -1,10 +1,6 @@
 <template>
   <div class="playground-page">
-    <SimulatedTerminal
-      :key="terminalKey"
-      @snapshot-synced="onSnapshotSynced"
-      @reset-environment="resetWorkspace"
-    />
+    <SimulatedTerminal :key="terminalKey" @snapshot-synced="onSnapshotSynced" @reset-environment="resetWorkspace" />
     <DockerStatePanel :env="dockerEnv" :events="dockerEvents" :sync-seq="dockerSyncSeq" />
   </div>
 </template>
@@ -46,11 +42,11 @@ function onSnapshotSynced({ env, events, syncSeq }: SnapshotPayload) {
 }
 
 function resetWorkspace() {
-  confirmDialog(
-    '重置将清空当前 Docker 模拟环境和本地缓存，确定继续吗？',
-    '重置 Docker 环境',
-    { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
-  )
+  confirmDialog('重置将清空当前 Docker 模拟环境和本地缓存，确定继续吗？', '重置 Docker 环境', {
+    confirmButtonText: '确定重置',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
     .then(() => {
       clearDockerState(WORKSPACE_ID)
       resetEnvironment()

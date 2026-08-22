@@ -28,14 +28,14 @@
 
 路由定义在 `src/router/index.ts`：
 
-| 路由 | 页面 | 说明 |
-| --- | --- | --- |
-| `/` | `DockerPlaygroundView.vue` | Docker 模拟终端与拓扑视图 |
-| `/git` | `GitPlaygroundView.vue` | Git 模拟终端与仓库状态视图 |
-| `/mysql` | `MySQLPlaygroundView.vue` | MySQL 模拟终端与数据视图 |
-| `/jvm` | `JvmPlaygroundView.vue` | 简化 Java 编辑器与 JVM 内存结构视图 |
+| 路由          | 页面                           | 说明                                   |
+| ------------- | ------------------------------ | -------------------------------------- |
+| `/`           | `DockerPlaygroundView.vue`     | Docker 模拟终端与拓扑视图              |
+| `/git`        | `GitPlaygroundView.vue`        | Git 模拟终端与仓库状态视图             |
+| `/mysql`      | `MySQLPlaygroundView.vue`      | MySQL 模拟终端与数据视图               |
+| `/jvm`        | `JvmPlaygroundView.vue`        | 简化 Java 编辑器与 JVM 内存结构视图    |
 | `/javascript` | `JavaScriptPlaygroundView.vue` | 简化 JavaScript 编辑器与执行上下文视图 |
-| 旧版深层地址 | 重定向 | 跳转到对应模块的 Playground |
+| 旧版深层地址  | 重定向                         | 跳转到对应模块的 Playground            |
 
 项目使用 `createWebHashHistory()`，适合静态托管。刷新子页面不会请求服务端重写。
 
@@ -150,16 +150,16 @@ JavaScript 核心模块：
 
 ## 持久化
 
-| Key | 位置 | 内容 |
-| --- | --- | --- |
-| `docker-sim-state-v1-docker-playground` | `src/terminal/simulator.ts` | Docker 镜像、容器、卷、网络和计数器 |
-| `git-sim-state-v1-git-playground` | `src/terminal/gitSimulator.ts` | Git 仓库状态 |
-| `mysql-sim-state-v1-mysql-playground` | `src/terminal/mysqlSimulator.ts` | MySQL 数据库、表结构和行数据 |
-| `jvm-editor-source-v1-jvm-playground` | `src/terminal/jvmSourceStorage.ts` | JVM 编辑器中的简化 Java 源码 |
-| `javascript-editor-source-v1-javascript-playground` | `src/terminal/javascriptSourceStorage.ts` | JavaScript 编辑器中的简化 JS 源码 |
-| `docker-viz-panel-open` | `DockerStatePanel.vue` | Docker 抽屉展开状态 |
-| `git-state-panel-open` | `GitStatePanel.vue` | Git 抽屉展开状态 |
-| `mysql-state-panel-open` | `MySQLStatePanel.vue` | MySQL 数据面板展开状态 |
+| Key                                                 | 位置                                      | 内容                                |
+| --------------------------------------------------- | ----------------------------------------- | ----------------------------------- |
+| `docker-sim-state-v1-docker-playground`             | `src/terminal/simulator.ts`               | Docker 镜像、容器、卷、网络和计数器 |
+| `git-sim-state-v1-git-playground`                   | `src/terminal/gitSimulator.ts`            | Git 仓库状态                        |
+| `mysql-sim-state-v1-mysql-playground`               | `src/terminal/mysqlSimulator.ts`          | MySQL 数据库、表结构和行数据        |
+| `jvm-editor-source-v1-jvm-playground`               | `src/terminal/jvmSourceStorage.ts`        | JVM 编辑器中的简化 Java 源码        |
+| `javascript-editor-source-v1-javascript-playground` | `src/terminal/javascriptSourceStorage.ts` | JavaScript 编辑器中的简化 JS 源码   |
+| `docker-viz-panel-open`                             | `DockerStatePanel.vue`                    | Docker 抽屉展开状态                 |
+| `git-state-panel-open`                              | `GitStatePanel.vue`                       | Git 抽屉展开状态                    |
+| `mysql-state-panel-open`                            | `MySQLStatePanel.vue`                     | MySQL 数据面板展开状态              |
 
 Docker、Git、MySQL 的模拟状态使用 `{ schemaVersion: 1, state: ... }` 包裹后写入 localStorage。加载时会先经过对应迁移函数；没有 `schemaVersion` 的旧缓存按 v0 裸状态处理，字段缺失时回填默认值，非法 JSON 或未知版本会放弃恢复并保留当前安全状态。
 

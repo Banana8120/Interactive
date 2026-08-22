@@ -30,11 +30,15 @@
           <div class="state-grid two">
             <div class="state-item">
               <span class="state-label">user.name</span>
-              <span class="state-value" :class="{ muted: !env.config.user.name }">{{ env.config.user.name || '未配置' }}</span>
+              <span class="state-value" :class="{ muted: !env.config.user.name }">{{
+                env.config.user.name || '未配置'
+              }}</span>
             </div>
             <div class="state-item">
               <span class="state-label">user.email</span>
-              <span class="state-value" :class="{ muted: !env.config.user.email }">{{ env.config.user.email || '未配置' }}</span>
+              <span class="state-value" :class="{ muted: !env.config.user.email }">{{
+                env.config.user.email || '未配置'
+              }}</span>
             </div>
             <div class="state-item">
               <span class="state-label">当前分支</span>
@@ -127,12 +131,7 @@
             <span>本地分支</span>
           </div>
           <div class="branch-list">
-            <div
-              v-for="b in branchList"
-              :key="b.name"
-              class="branch-chip"
-              :class="{ active: b.active }"
-            >
+            <div v-for="b in branchList" :key="b.name" class="branch-chip" :class="{ active: b.active }">
               <n-icon v-if="b.active"><Flag /></n-icon>
               <span>{{ b.name }}</span>
               <span v-if="b.hash" class="branch-hash">@{{ b.hash }}</span>
@@ -201,7 +200,9 @@
             <span>标签</span>
           </div>
           <div class="tag-list">
-            <n-tag v-for="t in tagList" :key="t.name" size="small" :bordered="false" type="warning" round>{{ t.name }}</n-tag>
+            <n-tag v-for="t in tagList" :key="t.name" size="small" :bordered="false" type="warning" round>{{
+              t.name
+            }}</n-tag>
           </div>
         </div>
       </div>
@@ -276,7 +277,10 @@ const statusMap = computed(() => getStatusMap(env.value))
 const workingFiles = computed(() => {
   return statusMap.value
     .filter((s) => s.working !== ' ')
-    .map((s) => ({ path: s.path, status: s.working === '?' ? 'untracked' : s.working === 'D' ? 'deleted' : 'modified' }))
+    .map((s) => ({
+      path: s.path,
+      status: s.working === '?' ? 'untracked' : s.working === 'D' ? 'deleted' : 'modified'
+    }))
 })
 
 // 暂存区：直接从引擎的 staged 对象读取，而不是 status 过滤后的结果。
@@ -799,5 +803,3 @@ const tagList = computed(() => {
   }
 }
 </style>
-
-

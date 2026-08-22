@@ -103,13 +103,14 @@ export function executeJavaScriptSource(
     targetLine,
     stoppedLine: runtime.stoppedLine,
     status,
-    message: status === 'error'
-      ? `执行在第 ${firstReachedDiagnosticLine(diagnostics, targetLine)} 行前停止`
-      : runtime.pausedInsideFunction
-        ? `已进入函数并执行到第 ${runtime.stoppedLine} 行`
-        : status === 'completed'
-          ? '已执行到最后一条语句'
-          : `已执行到第 ${runtime.stoppedLine || targetLine} 行`
+    message:
+      status === 'error'
+        ? `执行在第 ${firstReachedDiagnosticLine(diagnostics, targetLine)} 行前停止`
+        : runtime.pausedInsideFunction
+          ? `已进入函数并执行到第 ${runtime.stoppedLine} 行`
+          : status === 'completed'
+            ? '已执行到最后一条语句'
+            : `已执行到第 ${runtime.stoppedLine || targetLine} 行`
   }
 }
 
@@ -154,9 +155,10 @@ function executeFunctionBody(
       return true
     }
 
-    const ok = statement.kind === 'call'
-      ? executeCall(runtime, statement, null)
-      : executeAtomic(runtime, statement, () => executeExecutableStatement(runtime, statement))
+    const ok =
+      statement.kind === 'call'
+        ? executeCall(runtime, statement, null)
+        : executeAtomic(runtime, statement, () => executeExecutableStatement(runtime, statement))
     if (!ok) return false
 
     if (targetLine !== null && statement.line >= targetLine) {
@@ -187,10 +189,7 @@ function executeAtomic(
   return false
 }
 
-function executeExecutableStatement(
-  runtime: Runtime,
-  statement: JavaScriptExecutableStatement
-) {
+function executeExecutableStatement(runtime: Runtime, statement: JavaScriptExecutableStatement) {
   if (statement.kind === 'variable') return executeVariableDeclaration(runtime, statement)
   if (statement.kind === 'assignment') return executeAssignment(runtime, statement)
   return executeCall(runtime, statement, null) ? null : runtime.diagnostics.at(-1) || null
@@ -265,11 +264,7 @@ function executeAssignment(
   return null
 }
 
-function executeCall(
-  runtime: Runtime,
-  statement: JavaScriptCallStatement,
-  bodyTargetLine: number | null
-) {
+function executeCall(runtime: Runtime, statement: JavaScriptCallStatement, bodyTargetLine: number | null) {
   const callee = lookupBinding(runtime, statement.callee)
   if (!callee) {
     runtime.diagnostics.push(diagnostic('name', statement.line, `函数 ${statement.callee} 未声明。`))
@@ -504,11 +499,7 @@ function parseStringLiteral(expression: string) {
       return null
     }
   }
-  return expression
-    .slice(1, -1)
-    .replace(/\\'/g, "'")
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\')
+  return expression.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, '\\')
 }
 
 function parsePropertyKey(raw: string) {

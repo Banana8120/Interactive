@@ -174,7 +174,9 @@ onBeforeUnmount(() => {
   right: 20px;
   padding: 0;
   color: #73737b;
-  font: 28px/1 Arial, sans-serif;
+  font:
+    28px/1 Arial,
+    sans-serif;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -274,7 +276,9 @@ onBeforeUnmount(() => {
 
 .reset-toast-enter-active,
 .reset-toast-leave-active {
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .reset-toast-enter-from,

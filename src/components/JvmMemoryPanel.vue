@@ -15,10 +15,7 @@
           <strong>{{ meterItem.used }}/{{ meterItem.capacity }}</strong>
         </div>
         <div class="meter-track">
-          <span
-            :class="[`meter-fill`, `fill-${meterItem.key}`]"
-            :style="{ width: `${meterItem.percent}%` }"
-          ></span>
+          <span :class="[`meter-fill`, `fill-${meterItem.key}`]" :style="{ width: `${meterItem.percent}%` }"></span>
         </div>
       </div>
     </section>
@@ -56,7 +53,9 @@
               type="button"
               class="reference-link"
               @click="selectReference(value.value)"
-            >{{ value.value }}</button>
+            >
+              {{ value.value }}
+            </button>
             <code v-else>{{ formatJvmValue(value) }}</code>
           </div>
         </div>
@@ -104,7 +103,9 @@
                 type="button"
                 class="reference-link"
                 @click="selectReference(value.value)"
-              >{{ value.value }}</button>
+              >
+                {{ value.value }}
+              </button>
               <code v-else>{{ formatJvmValue(value) }}</code>
             </div>
           </div>
@@ -119,7 +120,9 @@
                 type="button"
                 class="reference-link"
                 @click="selectReference(item.value.value)"
-              >{{ item.value.value }}</button>
+              >
+                {{ item.value.value }}
+              </button>
               <code v-else>{{ formatJvmValue(item.value) }}</code>
             </div>
           </div>
@@ -160,7 +163,9 @@
               type="button"
               class="reference-link"
               @click="selectReference(value.value)"
-            >{{ value.value }}</button>
+            >
+              {{ value.value }}
+            </button>
             <code v-else>{{ formatJvmValue(value) }}</code>
           </div>
         </template>
@@ -175,7 +180,9 @@
               type="button"
               class="reference-link"
               @click="selectReference(item.value.value)"
-            >{{ item.value.value }}</button>
+            >
+              {{ item.value.value }}
+            </button>
             <code v-else>{{ formatJvmValue(item.value) }}</code>
           </div>
           <div v-if="entry.elements.length > ARRAY_PREVIEW_LIMIT" class="preview-note">
@@ -193,10 +200,18 @@
       <template v-if="state.lastGc">
         <p>{{ state.lastGc.trigger === 'manual' ? '手动触发' : '堆分配压力自动触发' }}</p>
         <div class="gc-stats">
-          <span>扫描 <strong>{{ state.lastGc.scanned }}</strong></span>
-          <span>存活 <strong>{{ state.lastGc.survived }}</strong></span>
-          <span>回收 <strong>{{ state.lastGc.collected }}</strong></span>
-          <span>释放 <strong>{{ state.lastGc.freed }}</strong></span>
+          <span
+            >扫描 <strong>{{ state.lastGc.scanned }}</strong></span
+          >
+          <span
+            >存活 <strong>{{ state.lastGc.survived }}</strong></span
+          >
+          <span
+            >回收 <strong>{{ state.lastGc.collected }}</strong></span
+          >
+          <span
+            >释放 <strong>{{ state.lastGc.freed }}</strong></span
+          >
         </div>
       </template>
       <p v-else>输入 gc 执行一次标记-清除。</p>
@@ -222,9 +237,9 @@ const classes = computed(() => Object.values(props.state.methodArea.classes))
 const threads = computed(() => Object.values(props.state.threads))
 const heapEntries = computed(() => Object.values(props.state.heap.entries))
 const stackUsage = computed(() => usage.value.stacks)
-const activeThread = computed(() => props.state.activeThreadId
-  ? props.state.threads[props.state.activeThreadId] || null
-  : null)
+const activeThread = computed(() =>
+  props.state.activeThreadId ? props.state.threads[props.state.activeThreadId] || null : null
+)
 
 const meters = computed(() => {
   const activeStack = activeThread.value ? stackUsage.value[activeThread.value.id] || 0 : 0
@@ -308,9 +323,21 @@ watch(
   gap: 12px;
 }
 
-.eyebrow { color: #8a5abd; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; }
-h2, h3, p { margin: 0; }
-h2 { margin-top: 2px; font-size: 19px; }
+.eyebrow {
+  color: #8a5abd;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+h2,
+h3,
+p {
+  margin: 0;
+}
+h2 {
+  margin-top: 2px;
+  font-size: 19px;
+}
 
 .active-thread {
   padding: 5px 8px;
@@ -329,9 +356,18 @@ h2 { margin-top: 2px; font-size: 19px; }
   background: #fcfaff;
 }
 
-.meter + .meter { margin-top: 10px; }
-.meter-head { margin-bottom: 5px; color: #74677f; font-size: 11px; }
-.meter-head strong { color: #473952; font-family: Consolas, monospace; }
+.meter + .meter {
+  margin-top: 10px;
+}
+.meter-head {
+  margin-bottom: 5px;
+  color: #74677f;
+  font-size: 11px;
+}
+.meter-head strong {
+  color: #473952;
+  font-family: Consolas, monospace;
+}
 
 .meter-track {
   height: 6px;
@@ -348,10 +384,18 @@ h2 { margin-top: 2px; font-size: 19px; }
   transition: width 0.3s ease;
 }
 
-.fill-method { background: #7c5ce1; }
-.fill-stack { background: #e28443; }
-.fill-heap { background: #2ba889; }
-.memory-section + .memory-section { margin-top: 20px; }
+.fill-method {
+  background: #7c5ce1;
+}
+.fill-stack {
+  background: #e28443;
+}
+.fill-heap {
+  background: #2ba889;
+}
+.memory-section + .memory-section {
+  margin-top: 20px;
+}
 
 .section-title-row h3 {
   display: flex;
@@ -360,13 +404,34 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-size: 14px;
 }
 
-.section-title-row > span { color: #8b7e94; font-size: 10px; }
-.section-dot { width: 8px; height: 8px; border-radius: 3px; }
-.method-dot { background: #7c5ce1; }
-.stack-dot { background: #e28443; }
-.heap-dot { background: #2ba889; }
-.section-note { margin: 4px 0 9px; color: #96899e; font-size: 11px; }
-.empty-state, .mini-empty { color: #a99eaf; text-align: center; }
+.section-title-row > span {
+  color: #8b7e94;
+  font-size: 10px;
+}
+.section-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+.method-dot {
+  background: #7c5ce1;
+}
+.stack-dot {
+  background: #e28443;
+}
+.heap-dot {
+  background: #2ba889;
+}
+.section-note {
+  margin: 4px 0 9px;
+  color: #96899e;
+  font-size: 11px;
+}
+.empty-state,
+.mini-empty {
+  color: #a99eaf;
+  text-align: center;
+}
 
 .empty-state {
   padding: 16px 10px;
@@ -375,7 +440,10 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-size: 11px;
 }
 
-.mini-empty { padding: 5px 0; font-size: 10px; }
+.mini-empty {
+  padding: 5px 0;
+  font-size: 10px;
+}
 
 .memory-card,
 .thread-card,
@@ -389,9 +457,15 @@ h2 { margin-top: 2px; font-size: 19px; }
 
 .memory-card + .memory-card,
 .thread-card + .thread-card,
-.frame-card + .frame-card { margin-top: 8px; }
-.class-card { border-left: 3px solid #8b6be5; }
-.heap-card { border-left: 3px solid #39aa90; }
+.frame-card + .frame-card {
+  margin-top: 8px;
+}
+.class-card {
+  border-left: 3px solid #8b6be5;
+}
+.heap-card {
+  border-left: 3px solid #39aa90;
+}
 
 .heap-card.selected {
   border-color: #9c65dd;
@@ -407,8 +481,15 @@ h2 { margin-top: 2px; font-size: 19px; }
 
 .card-title > span,
 .thread-title > span,
-.thread-title div span { color: #8f8396; font: 10px Consolas, monospace; }
-.value-group { margin-top: 9px; }
+.thread-title div span {
+  color: #8f8396;
+  font:
+    10px Consolas,
+    monospace;
+}
+.value-group {
+  margin-top: 9px;
+}
 
 .group-label {
   display: block;
@@ -438,16 +519,24 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-size: 10px;
 }
 
-.value-row + .value-row { margin-top: 3px; }
+.value-row + .value-row {
+  margin-top: 3px;
+}
 
 .value-row code {
   color: #523765;
-  font: 10px Consolas, monospace;
+  font:
+    10px Consolas,
+    monospace;
   overflow-wrap: anywhere;
   text-align: right;
 }
 
-.value-row small { color: #d26a27; font-size: 7px; font-weight: 800; }
+.value-row small {
+  color: #d26a27;
+  font-size: 7px;
+  font-weight: 800;
+}
 
 .reference-link {
   padding: 2px 6px;
@@ -455,11 +544,16 @@ h2 { margin-top: 2px; font-size: 19px; }
   border-radius: 4px;
   color: #7b3eb1;
   background: #eee0fa;
-  font: 700 10px Consolas, monospace;
+  font:
+    700 10px Consolas,
+    monospace;
   cursor: pointer;
 }
 
-.reference-link:hover { color: #fff; background: #8b55bd; }
+.reference-link:hover {
+  color: #fff;
+  background: #8b55bd;
+}
 
 .thread-card {
   overflow: hidden;
@@ -467,8 +561,14 @@ h2 { margin-top: 2px; font-size: 19px; }
   background: #fffcf9;
 }
 
-.thread-card.active { border-color: #e28443; }
-.thread-title div { display: flex; align-items: baseline; gap: 6px; }
+.thread-card.active {
+  border-color: #e28443;
+}
+.thread-title div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
 
 .active-badge,
 .top-label {
@@ -487,7 +587,9 @@ h2 { margin-top: 2px; font-size: 19px; }
   border-radius: 0 0 5px 5px;
 }
 
-.stack-empty { padding-top: 10px; }
+.stack-empty {
+  padding-top: 10px;
+}
 
 .frame-card {
   position: relative;
@@ -515,8 +617,19 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-weight: 800 !important;
 }
 
-.entry-type { margin: 5px 0 7px; color: #6d5f74; font: 10px Consolas, monospace; }
-.preview-note { margin-top: 6px; color: #95899c; font-size: 9px; text-align: center; }
+.entry-type {
+  margin: 5px 0 7px;
+  color: #6d5f74;
+  font:
+    10px Consolas,
+    monospace;
+}
+.preview-note {
+  margin-top: 6px;
+  color: #95899c;
+  font-size: 9px;
+  text-align: center;
+}
 
 .gc-card {
   margin-top: 20px;
@@ -524,10 +637,20 @@ h2 { margin-top: 2px; font-size: 19px; }
   background: linear-gradient(135deg, #f9f3ff, #f5fbfa);
 }
 
-.gc-card.idle { background: #faf8fc; }
-.gc-title strong { font-size: 12px; }
-.gc-title span, .gc-card p { color: #897990; font-size: 10px; }
-.gc-card p { margin-top: 5px; }
+.gc-card.idle {
+  background: #faf8fc;
+}
+.gc-title strong {
+  font-size: 12px;
+}
+.gc-title span,
+.gc-card p {
+  color: #897990;
+  font-size: 10px;
+}
+.gc-card p {
+  margin-top: 5px;
+}
 
 .gc-stats {
   margin-top: 8px;
@@ -545,9 +668,18 @@ h2 { margin-top: 2px; font-size: 19px; }
   text-align: center;
 }
 
-.gc-stats strong { display: block; color: #694187; font: 12px Consolas, monospace; }
+.gc-stats strong {
+  display: block;
+  color: #694187;
+  font:
+    12px Consolas,
+    monospace;
+}
 
 @media (max-width: 1000px) {
-  .memory-panel { max-height: none; position: static; }
+  .memory-panel {
+    max-height: none;
+    position: static;
+  }
 }
 </style>

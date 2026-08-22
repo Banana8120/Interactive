@@ -71,7 +71,9 @@
             type="button"
             class="reference-link"
             @click="selectReference(binding.value.value)"
-          >{{ binding.value.value }}</button>
+          >
+            {{ binding.value.value }}
+          </button>
           <code v-else>{{ formatJavaScriptValue(binding.value) }}</code>
         </div>
       </article>
@@ -110,7 +112,9 @@
               type="button"
               class="reference-link"
               @click="selectReference(value.value)"
-            >{{ value.value }}</button>
+            >
+              {{ value.value }}
+            </button>
             <code v-else>{{ formatJavaScriptValue(value) }}</code>
           </div>
         </template>
@@ -125,7 +129,9 @@
               type="button"
               class="reference-link"
               @click="selectReference(item.value.value)"
-            >{{ item.value.value }}</button>
+            >
+              {{ item.value.value }}
+            </button>
             <code v-else>{{ formatJavaScriptValue(item.value) }}</code>
           </div>
         </template>
@@ -188,7 +194,9 @@ const selectedReference = ref<string | null>(null)
 
 const contexts = computed(() => props.state.callStack)
 const stackFrames = computed(() => [...props.state.callStack].reverse())
-const activeContext = computed(() => props.state.callStack.find((item) => item.id === props.state.activeContextId) || null)
+const activeContext = computed(
+  () => props.state.callStack.find((item) => item.id === props.state.activeContextId) || null
+)
 const visibleScopes = computed(() => {
   const scopeIds = activeContext.value?.scopeIds || props.state.callStack.at(-1)?.scopeIds || []
   return scopeIds.map((id) => props.state.scopes[id]).filter(Boolean)
@@ -261,9 +269,21 @@ watch(
   gap: 12px;
 }
 
-.eyebrow { color: #9b8610; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; }
-h2, h3, p { margin: 0; }
-h2 { margin-top: 2px; font-size: 19px; }
+.eyebrow {
+  color: #9b8610;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+h2,
+h3,
+p {
+  margin: 0;
+}
+h2 {
+  margin-top: 2px;
+  font-size: 19px;
+}
 
 .active-frame {
   padding: 5px 8px;
@@ -298,13 +318,23 @@ h2 { margin-top: 2px; font-size: 19px; }
   display: block;
   margin-top: 4px;
   color: #292c21;
-  font: 18px Consolas, monospace;
+  font:
+    18px Consolas,
+    monospace;
 }
 
-.overview-item.stack { border-left: 3px solid #5a8f7b; }
-.overview-item.scope { border-left: 3px solid #f0db4f; }
-.overview-item.heap { border-left: 3px solid #4f9fd7; }
-.memory-section + .memory-section { margin-top: 20px; }
+.overview-item.stack {
+  border-left: 3px solid #5a8f7b;
+}
+.overview-item.scope {
+  border-left: 3px solid #f0db4f;
+}
+.overview-item.heap {
+  border-left: 3px solid #4f9fd7;
+}
+.memory-section + .memory-section {
+  margin-top: 20px;
+}
 
 .section-title-row h3 {
   display: flex;
@@ -313,13 +343,32 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-size: 14px;
 }
 
-.section-title-row > span { color: #8b8461; font-size: 10px; }
-.section-dot { width: 8px; height: 8px; border-radius: 3px; }
-.stack-dot { background: #5a8f7b; }
-.scope-dot { background: #f0db4f; }
-.heap-dot { background: #4f9fd7; }
-.reference-dot { background: #d28b30; }
-.section-note { margin: 4px 0 9px; color: #918b70; font-size: 11px; }
+.section-title-row > span {
+  color: #8b8461;
+  font-size: 10px;
+}
+.section-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+.stack-dot {
+  background: #5a8f7b;
+}
+.scope-dot {
+  background: #f0db4f;
+}
+.heap-dot {
+  background: #4f9fd7;
+}
+.reference-dot {
+  background: #d28b30;
+}
+.section-note {
+  margin: 4px 0 9px;
+  color: #918b70;
+  font-size: 11px;
+}
 
 .empty-state {
   padding: 16px 10px;
@@ -346,11 +395,23 @@ h2 { margin-top: 2px; font-size: 19px; }
 }
 
 .memory-card + .memory-card,
-.context-card + .context-card { margin-top: 8px; }
-.context-card { border-left: 3px solid #5a8f7b; background: #fbfffc; }
-.context-card.active { border-color: #32775f; box-shadow: 0 0 0 3px rgba(70, 143, 114, 0.12); }
-.scope-card { border-left: 3px solid #f0db4f; }
-.heap-card { border-left: 3px solid #4f9fd7; }
+.context-card + .context-card {
+  margin-top: 8px;
+}
+.context-card {
+  border-left: 3px solid #5a8f7b;
+  background: #fbfffc;
+}
+.context-card.active {
+  border-color: #32775f;
+  box-shadow: 0 0 0 3px rgba(70, 143, 114, 0.12);
+}
+.scope-card {
+  border-left: 3px solid #f0db4f;
+}
+.heap-card {
+  border-left: 3px solid #4f9fd7;
+}
 
 .heap-card.selected {
   border-color: #d7b92c;
@@ -363,7 +424,12 @@ h2 { margin-top: 2px; font-size: 19px; }
   overflow-wrap: anywhere;
 }
 
-.card-title span { color: #8f885f; font: 10px Consolas, monospace; }
+.card-title span {
+  color: #8f885f;
+  font:
+    10px Consolas,
+    monospace;
+}
 
 .top-label {
   position: absolute;
@@ -406,8 +472,12 @@ h2 { margin-top: 2px; font-size: 19px; }
   font-size: 10px;
 }
 
-.value-row + .value-row { margin-top: 3px; }
-.value-row span { overflow-wrap: anywhere; }
+.value-row + .value-row {
+  margin-top: 3px;
+}
+.value-row span {
+  overflow-wrap: anywhere;
+}
 
 .value-row em {
   margin-left: 4px;
@@ -419,7 +489,9 @@ h2 { margin-top: 2px; font-size: 19px; }
 
 .value-row code {
   color: #3d544c;
-  font: 10px Consolas, monospace;
+  font:
+    10px Consolas,
+    monospace;
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -430,11 +502,16 @@ h2 { margin-top: 2px; font-size: 19px; }
   border-radius: 4px;
   color: #2f7360;
   background: #dff4ec;
-  font: 700 10px Consolas, monospace;
+  font:
+    700 10px Consolas,
+    monospace;
   cursor: pointer;
 }
 
-.reference-link:hover { color: #fff; background: #32775f; }
+.reference-link:hover {
+  color: #fff;
+  background: #32775f;
+}
 
 .kind-badge {
   margin-left: 5px;
@@ -449,7 +526,9 @@ h2 { margin-top: 2px; font-size: 19px; }
 .entry-type {
   margin: 5px 0 7px;
   color: #6d6750;
-  font: 10px Consolas, monospace;
+  font:
+    10px Consolas,
+    monospace;
 }
 
 .edge-row {
@@ -469,12 +548,29 @@ h2 { margin-top: 2px; font-size: 19px; }
   text-align: left;
 }
 
-.edge-row + .edge-row { margin-top: 5px; }
-.edge-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.edge-row strong { color: #b57a27; }
-.edge-row code { color: #2f7360; font: 10px Consolas, monospace; }
+.edge-row + .edge-row {
+  margin-top: 5px;
+}
+.edge-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edge-row strong {
+  color: #b57a27;
+}
+.edge-row code {
+  color: #2f7360;
+  font:
+    10px Consolas,
+    monospace;
+}
 
 @media (max-width: 1000px) {
-  .execution-panel { max-height: none; position: static; }
+  .execution-panel {
+    max-height: none;
+    position: static;
+  }
 }
 </style>

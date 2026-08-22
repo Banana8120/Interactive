@@ -1,10 +1,6 @@
 <template>
   <div class="playground-page">
-    <GitTerminal
-      :key="terminalKey"
-      @command-executed="onCommand"
-      @reset-environment="resetWorkspace"
-    />
+    <GitTerminal :key="terminalKey" @command-executed="onCommand" @reset-environment="resetWorkspace" />
     <GitStatePanel :check-tick="checkTick" />
   </div>
 </template>
@@ -14,12 +10,7 @@ import { ref } from 'vue'
 import { message, confirmDialog } from '@/utils/feedback'
 import GitTerminal from '@/components/GitTerminal.vue'
 import GitStatePanel from '@/components/GitStatePanel.vue'
-import {
-  clearGitState,
-  loadGitState,
-  resetGitEnvironment,
-  saveGitState
-} from '@/terminal/gitSimulator'
+import { clearGitState, loadGitState, resetGitEnvironment, saveGitState } from '@/terminal/gitSimulator'
 
 const WORKSPACE_ID = 'git-playground'
 
@@ -34,11 +25,11 @@ function onCommand() {
 }
 
 function resetWorkspace() {
-  confirmDialog(
-    '重置将清空当前 Git 模拟仓库和本地缓存，确定继续吗？',
-    '重置 Git 环境',
-    { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
-  )
+  confirmDialog('重置将清空当前 Git 模拟仓库和本地缓存，确定继续吗？', '重置 Git 环境', {
+    confirmButtonText: '确定重置',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
     .then(() => {
       clearGitState(WORKSPACE_ID)
       resetGitEnvironment()

@@ -113,9 +113,7 @@ export function cloneJavaScriptState(state: JavaScriptState): JavaScriptState {
 }
 
 export function cloneValueRecord(record: Record<string, JavaScriptValue>) {
-  return Object.fromEntries(
-    Object.entries(record).map(([name, value]) => [name, cloneJavaScriptValue(value)])
-  )
+  return Object.fromEntries(Object.entries(record).map(([name, value]) => [name, cloneJavaScriptValue(value)]))
 }
 
 export function updateJavaScriptReferences(state: JavaScriptState) {

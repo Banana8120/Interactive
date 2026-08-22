@@ -48,11 +48,7 @@ export interface JvmThreadStatement {
   statements: JvmSourceStatement[]
 }
 
-export type JvmSourceStatement =
-  | JvmVariableStatement
-  | JvmAssignmentStatement
-  | JvmGcStatement
-  | JvmThreadStatement
+export type JvmSourceStatement = JvmVariableStatement | JvmAssignmentStatement | JvmGcStatement | JvmThreadStatement
 
 export interface JvmSourceMain {
   className: string
@@ -99,7 +95,9 @@ const TYPE_PATTERN = `(?:boolean|int|long|float|double|String|${IDENTIFIER})(?:\
 const CLASS_HEADER = new RegExp(`^(?:public\\s+)?class\\s+(${IDENTIFIER})$`)
 const MAIN_HEADER = /^(?:public\s+)?static\s+void\s+main\s*\(\s*(?:String\s*\[\]\s+[A-Za-z_$][\w$]*)?\s*\)$/
 const THREAD_HEADER = new RegExp(`^thread\\s+(${IDENTIFIER})$`)
-const FIELD_DECLARATION = new RegExp(`^(?:(static)\\s+)?(?:(final)\\s+)?(${TYPE_PATTERN})\\s+(${IDENTIFIER})(?:\\s*=\\s*(.+))?$`)
+const FIELD_DECLARATION = new RegExp(
+  `^(?:(static)\\s+)?(?:(final)\\s+)?(${TYPE_PATTERN})\\s+(${IDENTIFIER})(?:\\s*=\\s*(.+))?$`
+)
 const VARIABLE_DECLARATION = new RegExp(`^(${TYPE_PATTERN})\\s+(${IDENTIFIER})(?:\\s*=\\s*(.+))?$`)
 const ASSIGNMENT_TARGET = new RegExp(`^${IDENTIFIER}(?:(?:\\.${IDENTIFIER})|(?:\\[\\s*\\d+\\s*\\]))?$`)
 
@@ -231,9 +229,7 @@ export function parseJvmSource(source: string): JvmSourceProgram {
     if (context.kind === 'main' || context.kind === 'thread') {
       const statement = parseExecutableStatement(segment.text, segment.line, diagnostics)
       if (!statement) continue
-      const statements = context.kind === 'main'
-        ? context.mainNode.statements
-        : context.threadNode.statements
+      const statements = context.kind === 'main' ? context.mainNode.statements : context.threadNode.statements
       statements.push(statement)
       executableLines.push(segment.line)
       continue
@@ -277,9 +273,7 @@ export function parseJvmSource(source: string): JvmSourceProgram {
 
 export function parseJvmSourceType(raw: string): JvmSourceType {
   const normalized = raw.replace(/\s+/g, '')
-  return normalized.endsWith('[]')
-    ? { name: normalized.slice(0, -2), array: true }
-    : { name: normalized, array: false }
+  return normalized.endsWith('[]') ? { name: normalized.slice(0, -2), array: true } : { name: normalized, array: false }
 }
 
 export function formatJvmSource(source: string): string {
@@ -295,14 +289,13 @@ export function formatJvmSource(source: string): string {
     depth = Math.max(0, depth + opens - Math.max(0, closes))
     return line
   })
-  return formatted.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()
+  return formatted
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()
 }
 
-function parseField(
-  text: string,
-  line: number,
-  diagnostics: JvmSourceDiagnostic[]
-): JvmSourceField | null {
+function parseField(text: string, line: number, diagnostics: JvmSourceDiagnostic[]): JvmSourceField | null {
   const match = text.match(FIELD_DECLARATION)
   if (!match) {
     diagnostics.push({
